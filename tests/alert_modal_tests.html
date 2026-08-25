@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Kin Cafe - Alert Modal Tests</title>
+    <link rel="stylesheet" href="../assets/css/theme.css" />
+    <style>
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; padding: 16px; background: #fff; color: #111; }
+        .pass { color: #1F6B45; }
+        .fail { color: #B54747; }
+        code { background: #f5f5f5; padding: 2px 6px; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <h1>Alert Modal Tests</h1>
+    <div id="out"></div>
+
+    <script src="../assets/js/alert-modal.js"></script>
+    <script>
+        const out = document.getElementById('out');
+        const results = [];
+        function assertTrue(cond, name, details) {
+            results.push({ ok: !!cond, name, details: details || '' });
+        }
+
+        async function run() {
+            const api = window.KinAlertModal;
+            assertTrue(!!api, 'KinAlertModal exists');
+            const p = api.show({ mode: 'confirm', title: 'T', message: 'M', confirmText: 'Yes', cancelText: 'No' });
+            await new Promise(r => setTimeout(r, 30));
+
+            const overlay = document.querySelector('.kc-alert-overlay');
+            const dialog = document.querySelector('.kc-alert-dialog');
+            assertTrue(!!overlay, 'Overlay rendered');
+            assertTrue(!!dialog, 'Dialog rendered');
+            assertTrue(dialog.getAttribute('role') === 'alertdialog', 'ARIA role set');
+            assertTrue(dialog.getAttribute('aria-modal') === 'true', 'aria-modal set');
+
+            const rect = dialog.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = Math.abs(cx - (window.innerWidth / 2));
+            const dy = Math.abs(cy - (window.innerHeight / 2));
+            assertTrue(dx < 40 && dy < 40, 'Dialog centered within tolerance', `dx=${dx.toFixed(1)} dy=${dy.toFixed(1)}`);
+
+            const radius = getComputedStyle(dialog).borderRadius;
+            assertTrue(!!radius && radius !== '0px', 'Theme border radius applied', radius);
+
+            const btn = dialog.querySelector('button.btn');
+            assertTrue(!!btn, 'Buttons exist');
+            btn.click();
+            const ok = await p;
+            assertTrue(ok === true || ok === false, 'Promise resolves boolean', String(ok));
+        }
+
+        run().then(() => {
+            const passCount = results.filter(r => r.ok).length;
+            const failCount = results.length - passCount;
+            out.innerHTML = `<p><strong>${passCount}</strong> passed, <strong>${failCount}</strong> failed.</p>` +
+                '<ul>' + results.map(r => {
+                    const cls = r.ok ? 'pass' : 'fail';
+                    const detail = r.details ? ` <code>${r.details}</code>` : '';
+                    return `<li class="${cls}">${r.ok ? 'PASS' : 'FAIL'}: ${r.name}${detail}</li>`;
+                }).join('') + '</ul>';
+        });
+    </script>
+</body>
+</html>
+

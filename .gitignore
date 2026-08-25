@@ -1,0 +1,15 @@
+# Python virtual environment and cache
+python_forecast_service/venv/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Temporary lock files
+backups/.scheduled-backup.lock
+
+# Operating System & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
