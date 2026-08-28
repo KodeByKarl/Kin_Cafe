@@ -258,6 +258,7 @@ function updateCartDisplay() {
 function initMenuSearch() {
     const input = document.getElementById('menuSearchInput');
     const results = document.getElementById('menuSearchResults');
+    const searchBtn = document.getElementById('menuSearchButton');
     if (!input || !results) {
         return;
     }
@@ -265,6 +266,72 @@ function initMenuSearch() {
     const lookupByCode = (window.POS_CONFIG && window.POS_CONFIG.itemsByCode) || {};
     const items = (window.POS_CONFIG && window.POS_CONFIG.searchItems) || [];
     let lastRendered = [];
+    let originalCardOrder = null;
+
+    function getActiveGrid() {
+        const searching = String(input.value || '').trim() !== '';
+        if (searching) {
+            return document.querySelector('#cat-all .pos-grid') || document.querySelector('.category-panel.active .pos-grid');
+        }
+        return document.querySelector('.category-panel.active .pos-grid') || document.querySelector('#cat-all .pos-grid');
+    }
+
+    function captureOriginalOrder(grid) {
+        if (!grid || originalCardOrder) return;
+        originalCardOrder = Array.from(grid.querySelectorAll('.food-card'));
+    }
+
+    function parseCardItem(card) {
+        try {
+            return JSON.parse(card.getAttribute('data-item') || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function reorderPosGrid(matches) {
+        const grid = getActiveGrid();
+        if (!grid) return;
+        captureOriginalOrder(grid);
+        const cards = Array.from(grid.querySelectorAll('.food-card'));
+        if (!matches || !matches.length) {
+            cards.forEach((card) => {
+                card.style.display = '';
+                card.classList.remove('pos-search-hit');
+            });
+            if (originalCardOrder) {
+                originalCardOrder.forEach((card) => grid.appendChild(card));
+            }
+            return;
+        }
+
+        const matchIds = new Set(matches.map((m) => Number(m.id)));
+        const hitCards = [];
+        const otherCards = [];
+        cards.forEach((card) => {
+            const data = parseCardItem(card);
+            const id = Number(data.id || 0);
+            if (matchIds.has(id)) {
+                card.style.display = '';
+                card.classList.add('pos-search-hit');
+                hitCards.push(card);
+            } else {
+                card.style.display = 'none';
+                card.classList.remove('pos-search-hit');
+                otherCards.push(card);
+            }
+        });
+
+        // Stable order by match ranking
+        hitCards.sort((a, b) => {
+            const aId = Number(parseCardItem(a).id || 0);
+            const bId = Number(parseCardItem(b).id || 0);
+            const aIdx = matches.findIndex((m) => Number(m.id) === aId);
+            const bIdx = matches.findIndex((m) => Number(m.id) === bId);
+            return aIdx - bIdx;
+        });
+        [...hitCards, ...otherCards].forEach((card) => grid.appendChild(card));
+    }
 
     function hideResults() {
         results.style.display = 'none';
@@ -276,6 +343,7 @@ function initMenuSearch() {
         const q = String(term || '').trim();
         if (!q) {
             hideResults();
+            reorderPosGrid([]);
             return;
         }
 
@@ -286,11 +354,18 @@ function initMenuSearch() {
             const name = String(it.name || '').toLowerCase();
             const code = String(it.product_code || '').toUpperCase();
             return name.includes(qLower) || (code && code.includes(qUpper));
-        }).slice(0, 10);
+        }).slice(0, 20);
 
         lastRendered = matches;
+        const allTab = document.querySelector('#categoryTabs button');
+        if (allTab && typeof selectCategory === 'function' && !allTab.classList.contains('active')) {
+            selectCategory('cat-all', allTab);
+        }
+        reorderPosGrid(matches);
+
         if (!matches.length) {
-            hideResults();
+            results.innerHTML = '<div class="list-group-item text-muted">No matching menu items.</div>';
+            results.style.display = 'block';
             return;
         }
 
@@ -302,7 +377,7 @@ function initMenuSearch() {
                 ? `<small class="pos-search-result-meta text-danger">${escapeHtml(it.availability_detail || 'Currently unavailable')}</small>`
                 : `<small class="pos-search-result-meta text-muted">Ready to order</small>`;
             const priceText = it.available === false ? 'Unavailable' : `₱${formatCurrency(price)}`;
-        const categoryText = it.category_name ? `<small class="pos-search-result-meta text-muted">${escapeHtml(it.category_name)}</small>` : '';
+            const categoryText = it.category_name ? `<small class="pos-search-result-meta text-muted">${escapeHtml(it.category_name)}</small>` : '';
 
             return `<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center${availabilityClass}" data-idx="${idx}" ${it.available === false ? 'aria-disabled="true"' : ''}>
                 <span class="pos-search-result-copy"><strong>${escapeHtml(it.name || '')}</strong>${code}${categoryText}${availabilityText}</span>
@@ -322,10 +397,14 @@ function initMenuSearch() {
             addToCartSelect(item);
             input.value = '';
             hideResults();
+            reorderPosGrid([]);
         }
     });
 
     input.addEventListener('input', () => render(input.value));
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => render(input.value));
+    }
 
     input.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
@@ -339,6 +418,7 @@ function initMenuSearch() {
             addToCartSelect(exact);
             input.value = '';
             hideResults();
+            reorderPosGrid([]);
             return;
         }
 
@@ -346,6 +426,9 @@ function initMenuSearch() {
             addToCartSelect(lastRendered[0]);
             input.value = '';
             hideResults();
+            reorderPosGrid([]);
+        } else {
+            render(value);
         }
     });
 

@@ -92,7 +92,7 @@ function renderPosMenuCard(array $item): void {
     $isAvailable = !empty($item['available']);
     $availabilityDetail = buildPosAvailabilityDetail($item);
     ?>
-    <div class="food-card pos-modern-card <?php echo $isAvailable ? 'is-available' : 'is-unavailable'; ?>" data-item="<?php echo htmlspecialchars(json_encode($payload), ENT_QUOTES, 'UTF-8'); ?>" <?php echo $isAvailable ? 'onclick="addToCartSelectFromElement(this)"' : ''; ?> aria-disabled="<?php echo $isAvailable ? 'false' : 'true'; ?>">
+    <div class="food-card pos-modern-card <?php echo $isAvailable ? 'is-available' : 'is-unavailable'; ?>" data-item="<?php echo htmlspecialchars(json_encode($payload), ENT_QUOTES, 'UTF-8'); ?>" onclick="addToCartSelectFromElement(this)" aria-disabled="<?php echo $isAvailable ? 'false' : 'true'; ?>">
         <div class="thumb">
             <?php if ($item['image']): ?>
                 <img src="assets/images/<?php echo htmlspecialchars($item['image']); ?>" alt="<?php echo htmlspecialchars($item['name']); ?>">
@@ -138,7 +138,10 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
             <section class="pos-modern-left">
                 <div class="pos-catalog-toolbar">
                     <div class="pos-modern-search">
-                        <input type="text" id="menuSearchInput" class="form-control" placeholder="Search menu items...">
+                        <div class="pos-search-input-row">
+                            <input type="text" id="menuSearchInput" class="form-control" placeholder="Search menu items..." autocomplete="off">
+                            <button type="button" class="btn btn-primary" id="menuSearchButton">Search</button>
+                        </div>
                         <div id="menuSearchResults" class="list-group pos-modern-search-results"></div>
                     </div>
                     <div class="pos-toolbar-actions ai-module-utility-links">
@@ -375,11 +378,18 @@ function initPosAssistantPanel() {
     const closeBtn = document.getElementById('posAssistantClose');
     const form = document.getElementById('posAssistantForm');
     const questionInput = document.getElementById('posAssistantQuestion');
-    const responseBox = document.getElementById('posAssistantResponse');
-    const promptButtons = document.querySelectorAll('.pos-assistant-prompt');
+    const chatFeed = document.getElementById('posChatFeed');
+    const typingIndicator = document.getElementById('posTypingIndicator');
+    const promptButtons = document.querySelectorAll('.pos-chip, .pos-assistant-prompt');
 
-    if (!panel || !toggle || !form || !questionInput || !responseBox) {
+    if (!panel || !toggle || !form || !questionInput || !chatFeed) {
         return;
+    }
+
+    function scrollToBottom() {
+        if (chatFeed) {
+            chatFeed.scrollTop = chatFeed.scrollHeight;
+        }
     }
 
     function setOpen(isOpen) {
@@ -388,32 +398,71 @@ function initPosAssistantPanel() {
         toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         if (backdrop) backdrop.hidden = !isOpen;
         document.body.classList.toggle('pos-assistant-open', isOpen);
+        if (isOpen) {
+            setTimeout(() => {
+                questionInput.focus();
+                scrollToBottom();
+            }, 120);
+        }
     }
 
     toggle.addEventListener('click', () => setOpen(panel.hidden));
     if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
     if (backdrop) backdrop.addEventListener('click', () => setOpen(false));
 
-    promptButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-            questionInput.value = button.getAttribute('data-question') || '';
-            form.requestSubmit();
-        });
-    });
+    function appendUserMessage(text) {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const div = document.createElement('div');
+        div.className = 'chat-msg user';
+        div.innerHTML = `
+            <div class="chat-bubble">
+                ${escapeHtml(text)}
+                <div class="chat-time">${timeStr}</div>
+            </div>
+        `;
+        chatFeed.appendChild(div);
+        scrollToBottom();
+    }
 
-    form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const question = String(questionInput.value || '').trim();
-        if (!question) {
-            responseBox.innerHTML = '<p class="text-danger mb-0">Enter a question for the assistant.</p>';
-            return;
+    function appendAssistantMessage(htmlContent, sourceText) {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const div = document.createElement('div');
+        div.className = 'chat-msg assistant';
+        const sourceHtml = sourceText ? `<div class="chat-source">${escapeHtml(sourceText)}</div>` : '';
+        div.innerHTML = `
+            <div class="chat-bubble">
+                ${htmlContent}
+                ${sourceHtml}
+                <div class="chat-time">${timeStr}</div>
+            </div>
+        `;
+        chatFeed.appendChild(div);
+        scrollToBottom();
+    }
+
+    function setTyping(isTyping) {
+        if (!typingIndicator) return;
+        typingIndicator.hidden = !isTyping;
+        if (isTyping) {
+            scrollToBottom();
         }
+    }
 
-        responseBox.innerHTML = '<p class="text-muted mb-0">Thinking...</p>';
+    function askAssistant(question) {
+        const q = String(question || '').trim();
+        if (!q) return;
+
+        appendUserMessage(q);
+        questionInput.value = '';
+        setTyping(true);
+
         const csrfInput = form.querySelector('input[name="csrf_token"]');
         const csrfToken = (csrfInput && csrfInput.value)
             || (window.POS_CONFIG && window.POS_CONFIG.assistantCsrf)
             || '';
+
+        const startTime = Date.now();
+
         fetch('pos_assistant.php', {
             method: 'POST',
             credentials: 'same-origin',
@@ -422,22 +471,44 @@ function initPosAssistantPanel() {
                 'X-CSRF-Token': csrfToken,
             },
             body: JSON.stringify({
-                question,
+                question: q,
                 csrf_token: csrfToken
             })
         })
             .then(async (response) => {
                 const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Unable to reach the assistant.');
-                }
-                const notice = data.notice ? `<p class="text-warning small mb-2">${escapeHtml(data.notice)}</p>` : '';
-                const source = data.source ? `<span class="pos-assistant-source">${escapeHtml(String(data.provider || data.source))}</span>` : '';
-                responseBox.innerHTML = `${notice}<p class="mb-2">${escapeHtml(String(data.answer || ''))}</p>${source}`;
+                const elapsedTime = Date.now() - startTime;
+                const minDelay = 450; // Smooth realistic typing feel
+                const remainingDelay = Math.max(0, minDelay - elapsedTime);
+
+                setTimeout(() => {
+                    setTyping(false);
+                    if (!response.ok || !data.success) {
+                        appendAssistantMessage(`<span class="text-danger">${escapeHtml(data.message || 'Unable to reach the assistant.')}</span>`);
+                        return;
+                    }
+                    const noticeHtml = data.notice ? `<div class="text-warning small mb-1">${escapeHtml(data.notice)}</div>` : '';
+                    const answerStr = String(data.answer || '');
+                    const sourceText = data.provider || data.source || '';
+                    appendAssistantMessage(noticeHtml + answerStr, sourceText);
+                }, remainingDelay);
             })
             .catch((error) => {
-                responseBox.innerHTML = `<p class="text-danger mb-0">${escapeHtml(error.message || 'Unable to reach the assistant.')}</p>`;
+                setTyping(false);
+                appendAssistantMessage(`<span class="text-danger">${escapeHtml(error.message || 'Unable to reach the assistant.')}</span>`);
             });
+    }
+
+    promptButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const q = button.getAttribute('data-question') || button.textContent.trim();
+            askAssistant(q);
+        });
+    });
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        askAssistant(questionInput.value);
     });
 }
 
@@ -907,29 +978,63 @@ function maybeShowRecipeCustomization(item, onComplete) {
 
 <aside class="pos-assistant-panel" id="posAssistantPanel" aria-hidden="true" hidden>
     <div class="pos-assistant-head">
-        <div>
-            <h2>Virtual Assistant</h2>
-            <p>Quick operational answers while taking orders.</p>
+        <div class="assistant-head-brand">
+            <div>
+                <h2>Kin AI Assistant</h2>
+                <span class="assistant-status-online"><span class="status-dot"></span> Active & Ready</span>
+            </div>
         </div>
         <button type="button" class="pos-assistant-close" id="posAssistantClose" aria-label="Close assistant">&times;</button>
     </div>
-    <div class="pos-assistant-prompts" id="posAssistantPrompts">
-        <?php foreach ($posAssistant['prompts'] as $prompt): ?>
-            <button type="button" class="pos-assistant-prompt" data-question="<?php echo htmlspecialchars((string) $prompt['question'], ENT_QUOTES, 'UTF-8'); ?>">
-                <?php echo htmlspecialchars((string) $prompt['question']); ?>
-            </button>
-        <?php endforeach; ?>
-        <?php if (!$posAssistant['prompts']): ?>
-            <p class="pos-assistant-empty">No prompt library available yet.</p>
-        <?php endif; ?>
+
+    <div class="pos-chat-feed" id="posChatFeed" aria-live="polite">
+        <div class="chat-msg assistant">
+            <div class="chat-bubble">
+                Hello! I am your <strong>Kin Cafe Virtual Assistant</strong>. Ask me anything about sales forecasts, inventory stock, menu demand, customer trends, or POS operation guidance!
+                <div class="chat-time">Just now</div>
+            </div>
+        </div>
     </div>
-    <form class="pos-assistant-form" id="posAssistantForm">
-        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($posAssistantCsrf, ENT_QUOTES, 'UTF-8'); ?>">
-        <label for="posAssistantQuestion">Ask a question</label>
-        <textarea id="posAssistantQuestion" class="form-control" rows="3" placeholder="Example: Which ingredient needs reordering first?"></textarea>
-        <button type="submit" class="btn btn-primary btn-block">Ask Assistant</button>
-    </form>
-    <div class="pos-assistant-response" id="posAssistantResponse" aria-live="polite"></div>
+
+    <div class="typing-indicator" id="posTypingIndicator" hidden>
+        <div class="typing-bubble">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="typing-text">Kin AI is typing...</span>
+        </div>
+    </div>
+
+    <div class="pos-assistant-footer">
+        <div class="pos-assistant-chips" id="posAssistantChips">
+            <button type="button" class="pos-chip" data-question="What are forecasted sales for the next 7 days?">
+                <span>7-Day Sales Forecast</span>
+            </button>
+            <button type="button" class="pos-chip" data-question="Which ingredient needs reordering first?">
+                <span>Low Stock & Reorders</span>
+            </button>
+            <button type="button" class="pos-chip" data-question="What menu item demand is strongest right now?">
+                <span>Top Selling Demand</span>
+            </button>
+            <button type="button" class="pos-chip" data-question="Which customer preference stands out?">
+                <span>Customer Preferences</span>
+            </button>
+            <button type="button" class="pos-chip" data-question="Are there any expiring ingredients or waste alerts?">
+                <span>Waste & Expiration Alerts</span>
+            </button>
+            <button type="button" class="pos-chip" data-question="How do I process discounts and receipts in POS?">
+                <span>POS Quick Help</span>
+            </button>
+        </div>
+
+        <form class="pos-assistant-chat-form" id="posAssistantForm">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($posAssistantCsrf, ENT_QUOTES, 'UTF-8'); ?>">
+            <div class="chat-input-row">
+                <input type="text" id="posAssistantQuestion" class="form-control chat-input" placeholder="Ask a question or select a prompt..." autocomplete="off">
+                <button type="submit" class="btn btn-primary send-btn" title="Send Message">Send</button>
+            </div>
+        </form>
+    </div>
 </aside>
 <div class="pos-assistant-backdrop" id="posAssistantBackdrop" hidden></div>
 

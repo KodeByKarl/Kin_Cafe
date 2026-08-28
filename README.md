@@ -18,13 +18,20 @@ PHP-based cashier and back-office system for Kin Cafe with POS checkout, invento
 - Promotion management with fixed-value and percentage discounts.
 - Automatic application-level JSON backups stored under `backups/`.
 
-## Installation
+## Installation & Running
 
 1. Ensure XAMPP is installed and Apache/MySQL are running.
 2. Place the project in `htdocs/Kin_Cafe/`.
-3. Import [sql/schema.sql](sql/schema.sql) into MySQL for a fresh setup.
-4. Configure the database connection in `includes/app_config.php` or with environment variables if you need all devices to use one shared MySQL server.
-5. Open `http://localhost/Kin_Cafe/`.
+3. Double-click **`run.bat`**.
+   - In **1 single click**, it will:
+     - Check & auto-install Python virtual environment and required libraries (`flask`, `pandas`, `numpy`, `statsmodels`).
+     - Create required folders (`backups/`).
+     - Check & auto-setup MySQL database connection and schema.
+     - Launch the AI Forecast Microservice on `http://127.0.0.1:5000`.
+     - Automatically open `http://localhost/Kin_Cafe/` in your web browser.
+
+
+
 
 The app also performs idempotent schema upgrades automatically on startup through the shared PHP bootstrap, so older databases are migrated forward when possible.
 

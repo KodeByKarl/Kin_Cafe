@@ -519,6 +519,7 @@ function formatStockQuantity($quantity) {
                 <button type="button" onclick="toggleArchivedSection()">View Archived (<?php echo count($archivedIngredients); ?>)</button>
                 <?php endif; ?>
             </div>
+            <a class="btn btn-sm btn-outline-secondary" href="analytics_export.php?type=inventory&amp;format=excel">Export Excel</a>
         </div>
         <div class="card-body table-responsive">
             <table class="table inventory-table mb-0" id="inventoryTable">
@@ -553,7 +554,7 @@ function formatStockQuantity($quantity) {
                                 $statusClass = 'expiring';
                             }
                         ?>
-                        <tr data-status="<?php echo htmlspecialchars(strtolower($statusLabel)); ?>">
+                        <tr data-status="<?php echo htmlspecialchars(strtolower($statusLabel)); ?>" class="<?php echo $statusClass === 'low' ? 'is-low-stock' : ''; ?>">
                             <td data-name="<?php echo htmlspecialchars(strtolower((string) $ingredient['name'])); ?>">
                                 <div class="inventory-name-cell">
                                     <span class="inventory-avatar"><?php echo htmlspecialchars(strtoupper(substr((string) $ingredient['name'], 0, 1))); ?></span>

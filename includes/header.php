@@ -103,7 +103,6 @@
         <a class="sidebar-item logout" href="#" onclick="confirmLogout(event)" title="Sign out"><span class="sidebar-icon"><?php echo $navIcons['logout']; ?></span><span>Sign Out</span></a>
     </aside>
     <button class="kc-sidebar-overlay" type="button" aria-label="Close navigation"></button>
-
 <script>
 (() => {
     const key = 'kc_tab_id';
@@ -203,3 +202,194 @@ function confirmLogout(event) {
 }
 </script>
     <div class="kc-shell">
+<?php
+$kcNotifFeed = ['count' => 0, 'items' => []];
+$kcNotifCsrf = '';
+$kcUserName = '';
+try {
+    if (isset($pdo) && $pdo instanceof PDO && function_exists('getStaffNotificationFeed')) {
+        $kcNotifFeed = getStaffNotificationFeed($pdo, isset($_SESSION['admin']) ? (int) $_SESSION['admin'] : null, 16);
+        $kcNotifCsrf = csrfToken('notifications');
+    }
+    if (isset($pdo) && isset($_SESSION['admin']) && function_exists('getCurrentUser')) {
+        $kcUser = getCurrentUser($pdo);
+        $kcUserName = (string) ($kcUser['username'] ?? '');
+    }
+} catch (Throwable $e) {
+    $kcNotifFeed = ['count' => 0, 'items' => []];
+}
+$kcNotifCount = (int) ($kcNotifFeed['count'] ?? 0);
+$kcNotifItems = $kcNotifFeed['items'] ?? [];
+?>
+        <div class="kc-topbar" role="banner">
+            <div class="kc-topbar-spacer">
+                <?php if (!empty($pageTitle) || !empty($title)): ?>
+                    <h1 class="kc-topbar-title"><?php echo htmlspecialchars($pageTitle ?? $title); ?></h1>
+                <?php endif; ?>
+            </div>
+            <div class="kc-notif" id="kcNotifRoot" data-csrf="<?php echo htmlspecialchars($kcNotifCsrf); ?>">
+                <button type="button" class="kc-notif-bell" id="kcNotifToggle" aria-expanded="false" aria-controls="kcNotifPanel" title="Notifications">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5a5 5 0 0 0-5 5v2.1c0 .7-.2 1.4-.6 2L5.2 14.4A1.2 1.2 0 0 0 6.2 16.2h11.6a1.2 1.2 0 0 0 1-1.8l-1.2-1.8c-.4-.6-.6-1.3-.6-2V8.5a5 5 0 0 0-5-5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.6 17.2a2.5 2.5 0 0 0 4.8 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                    <span class="kc-notif-badge<?php echo $kcNotifCount > 0 ? ' is-on' : ''; ?>" id="kcNotifBadge" aria-label="<?php echo $kcNotifCount; ?> notifications"><?php echo $kcNotifCount > 9 ? '9+' : (string) $kcNotifCount; ?></span>
+                </button>
+                <div class="kc-notif-panel" id="kcNotifPanel" hidden>
+                    <div class="kc-notif-panel-head">
+                        <strong>Notifications</strong>
+                        <span id="kcNotifCountLabel"><?php echo $kcNotifCount; ?> new</span>
+                    </div>
+                    <div class="kc-notif-list" id="kcNotifList">
+                        <?php if (!$kcNotifItems): ?>
+                            <div class="kc-notif-empty">You're all caught up.</div>
+                        <?php else: ?>
+                            <?php foreach ($kcNotifItems as $n): ?>
+                                <article class="kc-notif-item is-<?php echo htmlspecialchars((string) ($n['severity'] ?? 'info')); ?>" data-key="<?php echo htmlspecialchars((string) ($n['key'] ?? '')); ?>">
+                                    <a class="kc-notif-link" href="<?php echo htmlspecialchars((string) ($n['href'] ?? '#')); ?>">
+                                        <span class="kc-notif-kind"><?php echo htmlspecialchars((string) ($n['meta'] ?? 'Alert')); ?></span>
+                                        <strong><?php echo htmlspecialchars((string) ($n['title'] ?? 'Alert')); ?></strong>
+                                        <p><?php echo nl2br(htmlspecialchars((string) ($n['preview'] ?? ''))); ?></p>
+                                        <span class="kc-notif-meta"><?php echo htmlspecialchars((string) ($n['time'] ?? '')); ?></span>
+                                    </a>
+                                    <?php if (!empty($n['key'])): ?>
+                                        <button type="button" class="kc-notif-dismiss" data-dismiss-key="<?php echo htmlspecialchars((string) $n['key']); ?>" aria-label="Dismiss">×</button>
+                                    <?php endif; ?>
+                                </article>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php if (!empty($kcUserName)): ?>
+                <div class="kc-topbar-user" title="Logged in as <?php echo htmlspecialchars($kcUserName); ?>">
+                    <span class="kc-topbar-user-avatar"><?php echo htmlspecialchars(strtoupper(substr($kcUserName, 0, 1))); ?></span>
+                    <span class="kc-topbar-user-name"><?php echo htmlspecialchars($kcUserName); ?></span>
+                </div>
+            <?php endif; ?>
+        </div>
+        <script>
+        (function () {
+            const root = document.getElementById('kcNotifRoot');
+            const toggle = document.getElementById('kcNotifToggle');
+            const panel = document.getElementById('kcNotifPanel');
+            const list = document.getElementById('kcNotifList');
+            const badge = document.getElementById('kcNotifBadge');
+            const countLabel = document.getElementById('kcNotifCountLabel');
+            if (!root || !toggle || !panel) return;
+            const csrf = root.getAttribute('data-csrf') || '';
+
+            function currentCount() {
+                return list ? list.querySelectorAll('.kc-notif-item').length : 0;
+            }
+
+            function syncCount(count) {
+                const n = Number(count);
+                if (badge) {
+                    badge.textContent = n > 9 ? '9+' : String(Math.max(0, n));
+                    badge.classList.toggle('is-on', n > 0);
+                    badge.setAttribute('aria-label', n + ' notifications');
+                }
+                if (countLabel) {
+                    countLabel.textContent = n + ' new';
+                }
+                if (list && n <= 0 && !list.querySelector('.kc-notif-empty')) {
+                    list.innerHTML = '<div class="kc-notif-empty">You\'re all caught up.</div>';
+                }
+            }
+
+            function closePanel() {
+                panel.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+            function openPanel() {
+                panel.hidden = false;
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+            toggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (panel.hidden) openPanel(); else closePanel();
+            });
+            document.addEventListener('click', function (e) {
+                if (!root.contains(e.target)) closePanel();
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closePanel();
+            });
+
+            root.addEventListener('click', function (e) {
+                const btn = e.target.closest('[data-dismiss-key]');
+                if (!btn) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const key = btn.getAttribute('data-dismiss-key') || '';
+                if (!key) return;
+                const body = new URLSearchParams();
+                body.set('action', 'dismiss');
+                body.set('notification_key', key);
+                body.set('csrf_token', csrf);
+                fetch('notifications_action.php', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+                    body: body.toString()
+                }).then(function (res) { return res.json(); }).then(function (data) {
+                    const item = btn.closest('.kc-notif-item');
+                    if (item) item.remove();
+                    syncCount(data && typeof data.count === 'number' ? data.count : currentCount());
+                }).catch(function () {
+                    const item = btn.closest('.kc-notif-item');
+                    if (item) item.remove();
+                    syncCount(currentCount());
+                });
+            });
+        })();
+        </script>
+
+    <!-- Global Floating Top-Right Toast Notification Container -->
+    <div id="kcToastContainer" class="kc-toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+    (function () {
+        window.showToast = function (type, title, message, duration) {
+            const container = document.getElementById('kcToastContainer');
+            if (!container) return;
+
+            duration = duration || 4500;
+            const toast = document.createElement('div');
+            toast.className = 'kc-toast kc-toast-' + (type || 'info');
+            
+            let iconSymbol = 'i';
+            if (type === 'success') iconSymbol = '✓';
+            else if (type === 'error' || type === 'danger') iconSymbol = '✕';
+            else if (type === 'warning') iconSymbol = '!';
+
+            const safeTitle = title ? String(title) : '';
+            const safeMsg = message ? String(message) : '';
+
+            const titleHtml = safeTitle ? '<div class="kc-toast-title">' + escapeHtml(safeTitle) + '</div>' : '';
+            const msgHtml = '<div class="kc-toast-message">' + escapeHtml(safeMsg) + '</div>';
+
+            toast.innerHTML = 
+                '<div class="kc-toast-icon-badge">' + iconSymbol + '</div>' +
+                '<div class="kc-toast-content">' + titleHtml + msgHtml + '</div>' +
+                '<button type="button" class="kc-toast-close" aria-label="Close">&times;</button>' +
+                '<div class="kc-toast-progress" style="animation-duration: ' + duration + 'ms;"></div>';
+
+            const closeBtn = toast.querySelector('.kc-toast-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () {
+                    toast.classList.add('hide');
+                    setTimeout(function () { toast.remove(); }, 300);
+                });
+            }
+
+            container.appendChild(toast);
+
+            setTimeout(function () {
+                if (toast.parentNode) {
+                    toast.classList.add('hide');
+                    setTimeout(function () { toast.remove(); }, 350);
+                }
+            }, duration);
+        };
+    })();
+    </script>
+

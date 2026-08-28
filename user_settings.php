@@ -12,11 +12,15 @@ require_once 'includes/mailer.php';
 $title = 'User Settings';
 $errors = [];
 $success = '';
-$activeSettingsTab = isset($_GET['tab']) && in_array($_GET['tab'], ['profile', 'security', 'users', 'notifications', 'general', 'database'], true) ? $_GET['tab'] : 'profile';
-
+$activeSettingsTab = isset($_GET['tab']) && in_array($_GET['tab'], ['profile', 'security', 'users', 'notifications', 'general', 'database', 'history'], true) ? $_GET['tab'] : 'profile';
 $userId = (int) $_SESSION['admin'];
 requirePermission($pdo, 'dashboard.view');
 $currentUserRole = getCurrentUserRole($pdo);
+
+// Cashiers: no Notifications / Database / General settings tabs (alerts live in top-right bell).
+if ($currentUserRole !== 'supervisor' && in_array($activeSettingsTab, ['notifications', 'database', 'general', 'users', 'history'], true)) {
+    $activeSettingsTab = 'profile';
+}
 
 $notificationPreferenceDefaults = [
     'pending_orders' => '1',
@@ -233,12 +237,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'update_notifications') {
         $activeSettingsTab = 'notifications';
-        foreach ($notificationPreferenceDefaults as $prefKey => $defaultValue) {
-            $enabled = isset($_POST['notify_' . $prefKey]) ? '1' : '0';
-            setUserPreference($pdo, $userId, 'notifications.' . $prefKey, $enabled);
-            $notificationPreferences[$prefKey] = $enabled === '1';
+        if ($currentUserRole !== 'supervisor') {
+            $errors[] = 'Only supervisors can change notification preferences.';
+            $activeSettingsTab = 'profile';
+        } else {
+            foreach ($notificationPreferenceDefaults as $prefKey => $defaultValue) {
+                $enabled = isset($_POST['notify_' . $prefKey]) ? '1' : '0';
+                setUserPreference($pdo, $userId, 'notifications.' . $prefKey, $enabled);
+                $notificationPreferences[$prefKey] = $enabled === '1';
+            }
+            $success = 'Notification settings updated.';
         }
-        $success = 'Notification settings updated.';
     } elseif ($action === 'dismiss_notification') {
         $activeSettingsTab = 'notifications';
         $notifKey = trim((string) ($_POST['notification_key'] ?? ''));
@@ -485,6 +494,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             readfile($filePath);
             exit;
         }
+    } elseif ($action === 'restore_backup') {
+        $activeSettingsTab = 'database';
+        if ($currentUserRole !== 'supervisor') {
+            $errors[] = 'Only supervisors can restore database backups.';
+        } else {
+            $fileName = basename(trim((string) ($_POST['file_name'] ?? '')));
+            $backupDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
+            $filePath = $backupDir . DIRECTORY_SEPARATOR . $fileName;
+
+            if ($fileName === '' || !file_exists($filePath)) {
+                $errors[] = 'Requested backup file not found.';
+            } else {
+                $result = restoreDatabaseFromBackup($pdo, $filePath);
+                if ($result['success']) {
+                    logAuditEvent($pdo, 'database_restored', 'setting', null, ['file' => $fileName]);
+                    $success = $result['message'];
+                } else {
+                    $errors[] = $result['message'];
+                }
+            }
+        }
     }
 
     $userStmt->execute([$userId]);
@@ -635,22 +665,25 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
     </div>
 
     <?php if ($success): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <strong>Success!</strong> <?php echo htmlspecialchars($success); ?>
-            <button type="button" class="close" data-dismiss="alert">&times;</button>
-        </div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof window.showToast === 'function') {
+                window.showToast('success', 'Settings Saved', <?php echo json_encode($success); ?>);
+            }
+        });
+        </script>
     <?php endif; ?>
 
     <?php if ($errors): ?>
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <strong>Error:</strong>
-            <ul class="mb-0 pl-3">
-                <?php foreach ($errors as $err): ?>
-                    <li><?php echo htmlspecialchars($err); ?></li>
-                <?php endforeach; ?>
-            </ul>
-            <button type="button" class="close" data-dismiss="alert">&times;</button>
-        </div>
+        <?php foreach ($errors as $err): ?>
+            <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                if (typeof window.showToast === 'function') {
+                    window.showToast('error', 'Action Failed', <?php echo json_encode($err); ?>);
+                }
+            });
+            </script>
+        <?php endforeach; ?>
     <?php endif; ?>
 
     <div class="card settings-card">
@@ -658,12 +691,13 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
             <div class="settings-nav">
                 <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'profile' ? ' active' : ''; ?>" data-tab="profile">Profile</button>
                 <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'security' ? ' active' : ''; ?>" data-tab="security">Security</button>
-                <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'notifications' ? ' active' : ''; ?>" data-tab="notifications">Notifications</button>
                 <?php if ($currentUserRole === 'supervisor'): ?>
+                <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'notifications' ? ' active' : ''; ?>" data-tab="notifications">Notifications</button>
+                <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'history' ? ' active' : ''; ?>" data-tab="history">Activity History</button>
                 <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'users' ? ' active' : ''; ?>" data-tab="users">User Accounts</button>
                 <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'general' ? ' active' : ''; ?>" data-tab="general">General System</button>
-                <?php endif; ?>
                 <button type="button" class="settings-nav-item<?php echo $activeSettingsTab === 'database' ? ' active' : ''; ?>" data-tab="database">Database</button>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -838,11 +872,13 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                 <?php endif; ?>
             </section>
 
+            <?php if ($currentUserRole === 'supervisor'): ?>
             <section class="settings-tab-panel<?php echo $activeSettingsTab === 'notifications' ? ' active' : ''; ?>" data-panel="notifications">
                 <div class="card settings-card settings-summary-card">
                     <div class="card-body">
                         <h2>Notification Center</h2>
-                        <div class="settings-summary-grid-modern settings-notification-summary-grid">
+                        <p class="text-muted mb-0">Live alerts also appear in the top-right notification bell. Use this tab for preferences and dismissals.</p>
+                        <div class="settings-summary-grid-modern settings-notification-summary-grid mt-3">
                             <div class="settings-summary-box"><span>Active Alerts</span><strong><?php echo $activeNotificationCount; ?></strong></div>
                             <div class="settings-summary-box"><span>Enabled Rules</span><strong><?php echo $enabledNotificationCount; ?></strong></div>
                             <div class="settings-summary-box"><span>Pending Orders</span><strong><?php echo $pendingOrdersCount; ?></strong></div>
@@ -910,6 +946,50 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                 </div>
             </section>
 
+            <section class="settings-tab-panel<?php echo $activeSettingsTab === 'history' ? ' active' : ''; ?>" data-panel="history">
+                <div class="card settings-card settings-summary-card">
+                    <div class="card-body">
+                        <h2>Menu &amp; Stock Activity</h2>
+                        <p class="text-muted mb-0">Who edited menu items or reduced/increased ingredient stock — including staff name and timestamp.</p>
+                    </div>
+                </div>
+                <div class="card settings-card">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table mb-0 settings-history-table">
+                                <thead>
+                                    <tr>
+                                        <th>When</th>
+                                        <th>Staff</th>
+                                        <th>Action</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $activityHistory = getRecentMenuAndStockHistory($pdo, 50);
+                                    if (!$activityHistory):
+                                    ?>
+                                        <tr><td colspan="4" class="text-muted p-4">No menu or stock edit history yet.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($activityHistory as $row): ?>
+                                            <tr>
+                                                <td><?php echo htmlspecialchars((string) ($row['created_at'] ?? '')); ?></td>
+                                                <td><strong><?php echo htmlspecialchars((string) ($row['username'] ?? 'System')); ?></strong></td>
+                                                <td><?php echo htmlspecialchars((string) ($row['label'] ?? $row['action'] ?? '')); ?></td>
+                                                <td><?php echo htmlspecialchars((string) ($row['summary'] ?? '')); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <?php endif; ?>
+
+            <?php if ($currentUserRole === 'supervisor'): ?>
             <section class="settings-tab-panel<?php echo $activeSettingsTab === 'general' ? ' active' : ''; ?>" data-panel="general">
                 <div class="card settings-card settings-summary-card">
                     <div class="card-body">
@@ -937,7 +1017,10 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
 
                 <?php if ($currentUserRole === 'supervisor'): ?>
                 <div class="card settings-card">
-                    <div class="card-header"><h4 class="mb-0">Virtual Assistant Provider</h4></div>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h4 class="mb-0">Virtual Assistant Provider</h4>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#envGuideModal">Env Overrides Guide</button>
+                    </div>
                     <div class="card-body">
                         <form method="post">
                             <input type="hidden" name="action" value="update_general_settings">
@@ -981,7 +1064,6 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                             </div>
                             <button type="submit" class="btn btn-primary">Save AI Settings</button>
                         </form>
-                        <p class="text-muted mt-3 mb-0">Environment variables `KIN_CAFE_AI_API_KEY`, `KIN_CAFE_AI_MODEL`, `KIN_CAFE_AI_ENDPOINT`, `KIN_CAFE_AI_ENABLED`, `KIN_CAFE_AI_PROVIDER`, and `KIN_CAFE_AI_SYSTEM_PROMPT` override these saved settings when present.</p>
                     </div>
                 </div>
 
@@ -1056,13 +1138,17 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                             </div>
                             <button type="submit" class="btn btn-primary">Save Email Settings</button>
                         </form>
-                        <p class="text-muted mt-3 mb-0">Environment variables `KIN_CAFE_MAIL_ENABLED`, `KIN_CAFE_SMTP_HOST`, `KIN_CAFE_SMTP_PORT`, `KIN_CAFE_SMTP_USERNAME`, `KIN_CAFE_SMTP_PASSWORD`, `KIN_CAFE_SMTP_ENCRYPTION`, and `KIN_CAFE_MAIL_FROM_EMAIL` override the saved settings when present.</p>
                     </div>
                 </div>
 
                 <div class="card settings-card">
-                    <div class="card-header"><h4 class="mb-0">Send Test Email</h4></div>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h4 class="mb-0">Send Test Email & Local Outbox</h4>
+                        <a href="outbox.php" class="btn btn-sm btn-outline-info">View Mail Outbox Feed</a>
+                    </div>
                     <div class="card-body">
+                        <p class="text-success font-weight-bold mb-2">Free Local Mail Delivery Active</p>
+                        <p class="text-muted small">Emails sent by Kin Cafe are automatically delivered via SMTP (if credentials are set) or saved to the free local outbox viewer at <a href="outbox.php">outbox.php</a> for instant inspection.</p>
                         <form method="post">
                             <input type="hidden" name="action" value="send_test_email">
                             <div class="form-row align-items-end">
@@ -1071,18 +1157,17 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                                     <input type="email" class="form-control" id="mail_test_recipient" name="mail_test_recipient" value="<?php echo htmlspecialchars((string) ($user['email'] ?? '')); ?>" required>
                                 </div>
                                 <div class="form-group col-md-4">
-                                    <button type="submit" class="btn btn-outline-primary btn-block">Send Test Email</button>
+                                    <button type="submit" class="btn btn-primary btn-block">Send Test Email</button>
                                 </div>
                             </div>
                         </form>
-                        <p class="text-muted mb-0">Use this after saving SMTP details to confirm the app can deliver real email through the configured server.</p>
                     </div>
                 </div>
-                <?php else: ?>
-                <div class="card settings-card"><div class="card-body"><p class="mb-0 text-muted">Only supervisors can change AI provider and email delivery settings.</p></div></div>
                 <?php endif; ?>
             </section>
+            <?php endif; ?>
 
+            <?php if ($currentUserRole === 'supervisor'): ?>
             <!-- DATABASE BACKUP TAB -->
             <section class="settings-tab-panel<?php echo $activeSettingsTab === 'database' ? ' active' : ''; ?>" data-panel="database">
                 <!-- Top Action Banner -->
@@ -1093,7 +1178,6 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                                 <h4 class="mb-1 font-weight-bold">Database Backup & Maintenance</h4>
                                 <p class="text-muted mb-0">Create instant system snapshots, configure automatic daily 5:00 PM backups, or export raw SQL dumps.</p>
                             </div>
-                            <?php if ($currentUserRole === 'supervisor'): ?>
                             <div class="d-flex align-items-center" style="gap:10px;">
                                 <form method="post" class="d-inline">
                                     <input type="hidden" name="action" value="export_sql">
@@ -1104,13 +1188,11 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                                     <button type="submit" class="btn btn-primary font-weight-bold">💾 Create Backup Now</button>
                                 </form>
                             </div>
-                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
 
                 <!-- Automatic 5:00 PM Schedule Settings Card -->
-                <?php if ($currentUserRole === 'supervisor'): ?>
                 <div class="card settings-card mb-4">
                     <div class="card-body">
                         <h5 class="font-weight-bold mb-3">Automatic Daily Backup Schedule</h5>
@@ -1160,7 +1242,6 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                         </div>
                     </div>
                 </div>
-                <?php endif; ?>
 
                 <!-- Backup History Table -->
                 <div class="card settings-card">
@@ -1200,10 +1281,15 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                                         <td><?php echo date('M d, Y h:i A', strtotime($bk['created_at'])); ?></td>
                                         <td class="text-right">
                                             <?php if ($bk['status'] === 'success'): ?>
-                                            <form method="post" class="d-inline">
+                                            <form method="post" class="d-inline mr-1">
                                                 <input type="hidden" name="action" value="download_backup">
                                                 <input type="hidden" name="file_name" value="<?php echo htmlspecialchars($bk['file_name']); ?>">
-                                                <button type="submit" class="btn btn-sm btn-outline-primary font-weight-bold">📥 Download JSON</button>
+                                                <button type="submit" class="btn btn-sm btn-outline-primary font-weight-bold">Download JSON</button>
+                                            </form>
+                                            <form method="post" class="d-inline" onsubmit="return confirm('WARNING: Restoring this backup snapshot will replace current database tables with this snapshot. Continue?');">
+                                                <input type="hidden" name="action" value="restore_backup">
+                                                <input type="hidden" name="file_name" value="<?php echo htmlspecialchars($bk['file_name']); ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-warning font-weight-bold">Restore Snapshot</button>
                                             </form>
                                             <?php else: ?>
                                                 <span class="text-muted small"><?php echo htmlspecialchars($bk['message'] ?: 'Failed'); ?></span>
@@ -1220,6 +1306,7 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                     </div>
                 </div>
             </section>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -1240,5 +1327,49 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+
+<!-- Environment Variables Guide Modal -->
+<div class="modal fade" id="envGuideModal" tabindex="-1" role="dialog" aria-labelledby="envGuideModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header" style="background:#fffdf9; border-bottom:1px solid rgba(91,63,48,0.12); padding:16px 24px;">
+                <h5 class="modal-title font-weight-bold" id="envGuideModalLabel" style="color:#35251d;">Environment Variables Guide</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:24px;">
+                <p class="text-muted small mb-3">You can override stored database configuration using environment variables (ideal for Docker, CI/CD, or secure production hosting):</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover border">
+                        <thead style="background:#f3ecdf;">
+                            <tr>
+                                <th>Category</th>
+                                <th>Environment Variable</th>
+                                <th>Description / Default</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size:0.84rem;">
+                            <tr><td>AI Assistant</td><td><code>KIN_CAFE_AI_ENABLED</code></td><td>Set to <code>1</code> to enable or <code>0</code> to disable.</td></tr>
+                            <tr><td>AI Assistant</td><td><code>KIN_CAFE_AI_PROVIDER</code></td><td>Provider label (e.g. <code>openai-compatible</code>).</td></tr>
+                            <tr><td>AI Assistant</td><td><code>KIN_CAFE_AI_MODEL</code></td><td>Model identifier (e.g. <code>gpt-4o-mini</code>).</td></tr>
+                            <tr><td>AI Assistant</td><td><code>KIN_CAFE_AI_ENDPOINT</code></td><td>Completion API endpoint URL.</td></tr>
+                            <tr><td>AI Assistant</td><td><code>KIN_CAFE_AI_API_KEY</code></td><td>Provider API Secret key.</td></tr>
+                            <tr><td>AI Assistant</td><td><code>KIN_CAFE_AI_SYSTEM_PROMPT</code></td><td>Custom system instructions.</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_MAIL_ENABLED</code></td><td>Set to <code>1</code> to enable email sending.</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_SMTP_HOST</code></td><td>SMTP Server host (e.g. <code>smtp.gmail.com</code>).</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_SMTP_PORT</code></td><td>SMTP Port (e.g. <code>587</code> for TLS, <code>465</code> for SSL).</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_SMTP_USERNAME</code></td><td>SMTP account login username/email.</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_SMTP_PASSWORD</code></td><td>SMTP password or App Password.</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_SMTP_ENCRYPTION</code></td><td><code>tls</code>, <code>ssl</code>, or <code>none</code>.</td></tr>
+                            <tr><td>Mail Delivery</td><td><code>KIN_CAFE_MAIL_FROM_EMAIL</code></td><td>Default Sender Email Address.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="background:#fffdf9; border-top:1px solid rgba(91,63,48,0.12);">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close Guide</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <?php include 'includes/footer.php'; ?>

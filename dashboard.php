@@ -286,49 +286,59 @@ function renderWeeklySalesChart(payload) {
     if (canvas) canvas.style.display = 'block';
 
     if (weeklySalesChart) {
-        weeklySalesChart.data.labels = labels;
-        weeklySalesChart.data.datasets[0].data = values;
-        weeklySalesChart.update();
-        return;
+        weeklySalesChart.destroy();
+        weeklySalesChart = null;
     }
 
     weeklySalesChart = new Chart(canvas.getContext('2d'), {
-        type: 'line',
+        type: 'bar',
         data: {
             labels,
             datasets: [{
                 label: 'Net Sales',
-                backgroundColor: 'rgba(155, 112, 79, 0.14)',
-                borderColor: '#8f6547',
-                pointBackgroundColor: '#8f6547',
+                backgroundColor: values.map((_, i) => i === values.length - 1 ? 'rgba(143, 101, 71, 0.92)' : 'rgba(176, 132, 98, 0.72)'),
+                borderColor: '#6f4b33',
+                borderWidth: 0,
+                hoverBackgroundColor: 'rgba(122, 82, 54, 0.95)',
                 data: values,
-                fill: true
+                barPercentage: 0.72,
+                categoryPercentage: 0.78
             }]
         },
         options: {
             legend: { display: false },
             maintainAspectRatio: false,
-            elements: {
-                line: { tension: 0.35, borderWidth: 3 },
-                point: { radius: 0, hitRadius: 12, hoverRadius: 4 }
+            tooltips: {
+                backgroundColor: '#3b2a20',
+                titleFontColor: '#f7efe6',
+                bodyFontColor: '#f7efe6',
+                cornerRadius: 8,
+                xPadding: 12,
+                yPadding: 10,
+                callbacks: {
+                    label: function(tooltipItem) {
+                        return '₱' + Number(tooltipItem.yLabel || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    }
+                }
             },
             scales: {
                 yAxes: [{
                     ticks: {
                         beginAtZero: true,
+                        fontColor: '#8a6b55',
                         callback: function(value) {
                             return '₱' + value;
                         }
                     },
                     gridLines: {
-                        color: 'rgba(122, 87, 67, 0.16)',
+                        color: 'rgba(122, 87, 67, 0.14)',
                         borderDash: [4, 4],
                         drawBorder: false
                     }
                 }],
                 xAxes: [{
                     gridLines: { display: false },
-                    ticks: { fontColor: '#B08E72' }
+                    ticks: { fontColor: '#B08E72', fontStyle: '600' }
                 }]
             }
         }

@@ -1481,14 +1481,14 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         $todayNet = (float) ($overview['today']['net_sales'] ?? 0);
         $todayCount = (int) ($overview['today']['order_count'] ?? 0);
         $avgVal = $todayCount > 0 ? $todayNet / $todayCount : 0;
-        return "Today's net sales are ₱" . number_format($todayNet, 2) . " across " . $todayCount . " completed order(s) (Average order value: ₱" . number_format($avgVal, 2) . ").";
+        return "<strong>Today's Sales Performance:</strong><br>• <strong>Net Sales:</strong> ₱" . number_format($todayNet, 2) . "<br>• <strong>Completed Orders:</strong> " . $todayCount . "<br>• <strong>Average Order Value:</strong> ₱" . number_format($avgVal, 2);
     }
 
     // 2. FORECAST / NEXT 7 DAYS / PROJECTION
     if (preg_match('/(forecast|next 7 days|next week|predict|future sales|projected)/i', $q)) {
         $forecastVal = (float) ($overview['forecast_next_week'] ?? 0);
-        $trend = (string) ($overview['trend_label'] ?? 'Stable');
-        return "Projected net sales for the next 7 days are ₱" . number_format($forecastVal, 2) . " (Trend direction: " . $trend . ").";
+        $trend = (string) ($overview['trend_label'] ?? 'Stable Growth');
+        return "<strong>7-Day Sales Projection (ARIMA Model):</strong><br>• <strong>Forecasted Revenue:</strong> ₱" . number_format($forecastVal, 2) . "<br>• <strong>Trend Direction:</strong> " . htmlspecialchars($trend) . "<br>• <strong>Insight:</strong> Keep inventory ready for peak afternoon service windows.";
     }
 
     // 3. LOW STOCK / INVENTORY / REORDER / SHORTAGE
@@ -1496,11 +1496,11 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         $lowStock = $overview['low_stock_ingredients'] ?? [];
         if (!empty($lowStock)) {
             $items = array_map(static function ($item) {
-                return $item['name'] . ' (' . rtrim(rtrim(number_format((float) $item['stock_quantity'], 2), '0'), '.') . ' ' . $item['unit'] . ')';
+                return '• <strong>' . htmlspecialchars($item['name']) . '</strong>: ' . rtrim(rtrim(number_format((float) $item['stock_quantity'], 2), '0'), '.') . ' ' . htmlspecialchars($item['unit']) . ' left';
             }, array_slice($lowStock, 0, 5));
-            return "The following ingredient(s) are low on stock and need reordering: " . implode(', ', $items) . ".";
+            return "<strong>Inventory Reorder Guidance:</strong><br>" . implode("<br>", $items) . "<br><small><em>Action: Create a purchase order to avoid menu item unavailability.</em></small>";
         }
-        return "All inventory ingredients are currently above minimum threshold levels.";
+        return "<strong>Inventory Status:</strong> All ingredients are currently above minimum threshold levels.";
     }
 
     // 4. EXPIRING / EXPIRATION / SPOIL / WASTE
@@ -1508,11 +1508,11 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         $expiring = $overview['expiring_ingredients'] ?? [];
         if (!empty($expiring)) {
             $items = array_map(static function ($item) {
-                return $item['name'] . ' (Expires: ' . $item['expiration_date'] . ')';
+                return '• <strong>' . htmlspecialchars($item['name']) . '</strong> (Expires: ' . htmlspecialchars($item['expiration_date']) . ')';
             }, array_slice($expiring, 0, 5));
-            return "The following ingredient(s) are near expiration: " . implode(', ', $items) . ".";
+            return "<strong>Waste Reduction Alert:</strong><br>" . implode("<br>", $items) . "<br><small><em>Action: Feature these in today's promos to minimize waste.</em></small>";
         }
-        return "No ingredients are currently approaching expiration.";
+        return "<strong>Waste & Expiration Status:</strong> No ingredients are currently approaching expiration.";
     }
 
     // 5. TOP SELLING / BEST SELLER / POPULAR / DEMAND / MOST SOLD
@@ -1521,23 +1521,21 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         $forecasting = getAiSalesForecastingData($pdo);
         $topItemOverall = $forecasting['top_items'][0] ?? null;
 
-        $msg = [];
+        $lines = ["<strong>Menu Item Demand & Bestsellers:</strong>"];
         if ($todayTop && !empty($todayTop['name'])) {
-            $msg[] = "Today's top seller is " . $todayTop['name'] . " (" . (int) $todayTop['qty'] . " units sold)";
+            $lines[] = "• <strong>Today's #1 Item:</strong> " . htmlspecialchars($todayTop['name']) . " (" . (int) $todayTop['qty'] . " units sold today)";
         }
         if ($topItemOverall && !empty($topItemOverall['name'])) {
-            $msg[] = "Overall top performing item is " . $topItemOverall['name'] . " (" . (int) ($topItemOverall['total_sold'] ?? $topItemOverall['sales'] ?? $topItemOverall['quantity'] ?? 0) . " units total)";
+            $lines[] = "• <strong>All-Time Bestseller:</strong> " . htmlspecialchars($topItemOverall['name']) . " (" . (int) ($topItemOverall['total_sold'] ?? $topItemOverall['sales'] ?? 0) . " total units)";
         }
-        if ($msg) {
-            return implode('. ', $msg) . '.';
-        }
-        return "Top category in recent completed sales is " . ($overview['top_category']['category_name'] ?? 'General Menu') . ".";
+        $lines[] = "• <strong>Top Category:</strong> " . htmlspecialchars($overview['top_category']['category_name'] ?? 'General Menu');
+        return implode("<br>", $lines);
     }
 
     // 6. PENDING ORDERS / KITCHEN / QUEUE
     if (preg_match('/(pending|kitchen|queue|active order|waiting)/i', $q)) {
         $pending = (int) ($overview['pending_orders'] ?? 0);
-        return "There are currently " . $pending . " pending order(s) waiting in the kitchen queue.";
+        return "<strong>Kitchen Queue Status:</strong><br>• <strong>Active Pending Orders:</strong> " . $pending . "<br>• <strong>Recommendation:</strong> " . ($pending > 3 ? 'High kitchen volume! Prioritize checkout speed.' : 'Kitchen queue is running smoothly.');
     }
 
     // 7. CUSTOMER / PREFERENCES / LOYALTY
@@ -1545,12 +1543,17 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         $custPref = getAiCustomerPreferencesData($pdo);
         if (!empty($custPref['top_customers'])) {
             $topC = $custPref['top_customers'][0];
-            return "Top customer is " . ($topC['name'] ?: 'Walk-in') . " with ₱" . number_format((float) $topC['sales_total'], 2) . " total spent.";
+            return "<strong>Customer Preference Insights:</strong><br>• <strong>Top VIP Spender:</strong> " . htmlspecialchars($topC['name'] ?: 'Walk-in') . " (₱" . number_format((float) $topC['sales_total'], 2) . " spent)<br>• <strong>Preferred Category:</strong> " . htmlspecialchars($overview['top_category']['category_name'] ?? 'Beverages');
         }
-        return "Customer preference patterns indicate strong demand in " . ($overview['top_category']['category_name'] ?? 'Beverages') . ".";
+        return "<strong>Customer Preference Analysis:</strong> Strong customer preference indicated for " . htmlspecialchars($overview['top_category']['category_name'] ?? 'Beverages') . ".";
     }
 
-    // 8. FALLBACK TOKEN MATCHING AGAINST PROMPT LIBRARY
+    // 8. POS / DISCOUNT / HELP / RECEIPT / CASH / CHECKOUT
+    if (preg_match('/(pos|discount|receipt|cash|checkout|pwd|senior|how to|help)/i', $q)) {
+        return "<strong>POS Operational Guide:</strong><br>• <strong>Checkout:</strong> Add items to cart, enter cash amount, click CASH button.<br>• <strong>Discounts:</strong> Check <em>PWD/Senior Discount (20%)</em> or enter a promo code before payment.<br>• <strong>Receipts:</strong> Click <em>Print Receipt</em> on order completion popup.";
+    }
+
+    // 9. FALLBACK TOKEN MATCHING AGAINST PROMPT LIBRARY
     $feature = getAiVirtualAssistantData($pdo);
     $questionTokens = aiTokenizeQuestion($question);
     $bestScore = 0;
@@ -1569,13 +1572,11 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         return $bestAnswer;
     }
 
-    // 9. DYNAMIC SUMMARY FALLBACK FOR ALL OTHER QUESTIONS
+    // 10. DYNAMIC PREDICTIVE OVERVIEW SUMMARY
     $todayNet = number_format((float) ($overview['today']['net_sales'] ?? 0), 2);
     $pending = (int) ($overview['pending_orders'] ?? 0);
     $forecastVal = number_format((float) ($overview['forecast_next_week'] ?? 0), 2);
-    $topCat = (string) ($overview['top_category']['category_name'] ?? 'General Menu');
-
-    return "Here is a quick snapshot of live store data: Today's sales are ₱{$todayNet}, pending orders in queue are {$pending}, 7-day sales forecast is ₱{$forecastVal}, and top menu category is {$topCat}.";
+    return "<strong>Kin Cafe Virtual Assistant:</strong><br>• <strong>Today's Sales:</strong> ₱" . $todayNet . "<br>• <strong>Pending Orders:</strong> " . $pending . "<br>• <strong>7-Day Forecast:</strong> ₱" . $forecastVal . "<br><small>Ask any specific question or click a prompt above!</small>";
 }
 
 function aiBuildAssistantContext(PDO $pdo): string {
@@ -1585,35 +1586,44 @@ function aiBuildAssistantContext(PDO $pdo): string {
     $reordering = getAiSmartReorderingData($pdo);
     $waste = getAiWasteReductionData($pdo);
     $anomalies = getAiAnomalyDetectionData($pdo);
+    $customers = getAiCustomerPreferencesData($pdo);
 
     $lowStockNames = array_slice(array_map(static function (array $row): string {
-        return (string) ($row['name'] ?? '');
+        return (string) ($row['name'] ?? '') . ' (' . rtrim(rtrim(number_format((float) ($row['stock_quantity'] ?? 0), 2), '0'), '.') . ' ' . ($row['unit'] ?? '') . ')';
     }, $overview['low_stock_ingredients']), 0, 5);
 
     $expiringNames = array_slice(array_map(static function (array $row): string {
-        return (string) ($row['name'] ?? '');
+        return (string) ($row['name'] ?? '') . ' (Expires: ' . ($row['expiration_date'] ?? '') . ')';
     }, $overview['expiring_ingredients']), 0, 5);
 
     $topDrivers = array_slice(array_map(static function (array $row): string {
-        return (string) ($row['name'] ?? '');
+        return (string) ($row['name'] ?? '') . ' (' . (int) ($row['total_sold'] ?? $row['sales'] ?? 0) . ' sold)';
     }, $forecasting['top_items']), 0, 5);
 
+    $topCustomerName = !empty($customers['top_customers'][0]) ? ($customers['top_customers'][0]['name'] ?: 'Walk-in') . ' (₱' . number_format((float) $customers['top_customers'][0]['sales_total'], 2) . ')' : 'None recorded';
+
     return implode("\n", [
-        'Kin Cafe business context:',
-        '- Pending orders: ' . (int) $overview['pending_orders'],
-        '- Forecast next 7 days: ₱' . number_format((float) $overview['forecast_next_week'], 2),
-        '- Trend: ' . (string) $forecasting['trend_label'],
-        '- Peak day: ' . (string) $forecasting['peak_day_label'],
-        '- Peak hour: ' . (string) $forecasting['peak_hour_label'],
-        '- Average daily sales: ₱' . number_format((float) $forecasting['average_daily_sales'], 2),
-        '- Low stock ingredients: ' . ($lowStockNames ? implode(', ', $lowStockNames) : 'None flagged'),
-        '- Expiring ingredients: ' . ($expiringNames ? implode(', ', $expiringNames) : 'None flagged'),
-        '- Inventory rows analyzed: ' . count($inventory['items']),
-        '- Reorder candidates: ' . count($reordering['items']),
-        '- Sales anomalies flagged: ' . count($anomalies['sales']),
-        '- Inventory anomalies flagged: ' . count($anomalies['inventory']),
-        '- Waste alerts: ' . count($waste['waste_alerts']),
-        '- Top forecast drivers: ' . ($topDrivers ? implode(', ', $topDrivers) : 'No item demand history yet'),
+        'Kin Cafe Comprehensive Business Intelligence & Live Context:',
+        '--- SALES & FORECASTING ---',
+        '- Today Net Sales: ₱' . number_format((float) ($overview['today']['net_sales'] ?? 0), 2),
+        '- Today Completed Orders: ' . (int) ($overview['today']['order_count'] ?? 0),
+        '- Pending Kitchen Queue Orders: ' . (int) $overview['pending_orders'],
+        '- 7-Day Forecasted Revenue (ARIMA/SARIMA): ₱' . number_format((float) $overview['forecast_next_week'], 2),
+        '- Average Daily Sales Velocity: ₱' . number_format((float) $forecasting['average_daily_sales'], 2),
+        '- Forecast Trend Direction: ' . (string) $forecasting['trend_label'],
+        '- Peak Service Window: Day = ' . (string) $forecasting['peak_day_label'] . ', Hour = ' . (string) $forecasting['peak_hour_label'],
+        '- Top Forecast Revenue Drivers: ' . ($topDrivers ? implode(', ', $topDrivers) : 'No item demand history yet'),
+        '--- INVENTORY & SUPPLY CHAIN ---',
+        '- Critical Low Stock Ingredients: ' . ($lowStockNames ? implode(', ', $lowStockNames) : 'All above threshold'),
+        '- Total Inventory Items Analyzed: ' . count($inventory['items']),
+        '- Urgent Reorder Candidates: ' . count($reordering['items']),
+        '- Ingredients Expiring Soon: ' . ($expiringNames ? implode(', ', $expiringNames) : 'None near expiration'),
+        '- Waste Risk Alerts Flagged: ' . count($waste['waste_alerts']),
+        '--- CUSTOMERS & ANOMALIES ---',
+        '- Highest Value VIP Customer: ' . $topCustomerName,
+        '- Preferred Product Category: ' . (string) ($overview['top_category']['category_name'] ?? 'General Menu'),
+        '- Sales Anomalies ($z-score flags): ' . count($anomalies['sales']),
+        '- Inventory Adjustment Audit Flags: ' . count($anomalies['inventory']),
     ]);
 }
 

@@ -290,6 +290,14 @@ function ensureSystemSchema(PDO $pdo): void {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
 
+    $pdo->exec("CREATE TABLE IF NOT EXISTS notification_reads (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        notification_key VARCHAR(100) NOT NULL,
+        dismissed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY user_notif (user_id, notification_key)
+    )");
+
     $pdo->exec("CREATE TABLE IF NOT EXISTS audit_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NULL,
@@ -491,7 +499,7 @@ function ensureSystemSchema(PDO $pdo): void {
         'ai_assistant_model' => 'gpt-4o-mini',
         'ai_assistant_api_key' => '',
         'ai_assistant_timeout_seconds' => '20',
-        'ai_assistant_system_prompt' => 'You are the Kin Cafe virtual assistant. Answer only with information grounded in the provided business context. If the answer is not supported by the context, say that the system does not currently have enough verified data.',
+        'ai_assistant_system_prompt' => 'You are Kin Cafe\'s Lead AI Operations Strategist & Business Intelligence Analyst. Provide deep, data-driven, highly precise, and predictive analysis based on live cafe transactions and inventory data. Always include quantitative metrics, clear trend interpretations, specific operational risk flags, and step-by-step optimization recommendations.',
         'mail_enabled' => $mailDefaults['enabled'] ? '1' : '0',
         'mail_smtp_host' => $mailDefaults['host'],
         'mail_smtp_port' => (string) $mailDefaults['port'],
@@ -2123,6 +2131,239 @@ function getUnavailableMenuItemsSnapshot(PDO $pdo, int $limit = 8): array {
     ];
 }
 
+function dismissStaffNotification(PDO $pdo, int $userId, string $notificationKey): bool {
+    $notificationKey = trim($notificationKey);
+    if ($userId <= 0 || $notificationKey === '' || !tableExists($pdo, 'notification_reads')) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO notification_reads (user_id, notification_key) VALUES (?, ?) ON DUPLICATE KEY UPDATE dismissed_at = NOW()");
+    $stmt->execute([$userId, $notificationKey]);
+    return true;
+}
+
+function getStaffNotificationFeed(PDO $pdo, ?int $userId = null, int $limit = 16): array {
+    $userId = $userId ?? (isset($_SESSION['admin']) ? (int) $_SESSION['admin'] : 0);
+    $role = getCurrentUserRole($pdo);
+    $isSupervisor = $role === 'supervisor';
+    $limit = max(1, min(30, $limit));
+    $items = [];
+
+    $dismissedKeys = [];
+    if ($userId > 0 && tableExists($pdo, 'notification_reads')) {
+        $stmt = $pdo->prepare('SELECT notification_key FROM notification_reads WHERE user_id = ?');
+        $stmt->execute([$userId]);
+        $dismissedKeys = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+    }
+
+    $prefs = [
+        'pending_orders' => true,
+        'low_stock' => true,
+        'expiring_ingredients' => $isSupervisor,
+        'unavailable_items' => true,
+        'backup_health' => $isSupervisor,
+    ];
+    if ($userId > 0) {
+        foreach ($prefs as $prefKey => $defaultOn) {
+            $saved = getUserPreference($pdo, $userId, 'notifications.' . $prefKey, $defaultOn ? '1' : '0');
+            $prefs[$prefKey] = $saved === '1';
+        }
+        if (!$isSupervisor) {
+            $prefs['expiring_ingredients'] = false;
+            $prefs['backup_health'] = false;
+        }
+    }
+
+    try {
+        $orderRows = $pdo->query("SELECT o.id, o.receipt_number, o.created_at, o.total_amount, o.payment_status,
+                COALESCE(NULLIF(TRIM(c.name), ''), 'Walk-in') AS customer_name,
+                GROUP_CONCAT(CONCAT(oi.quantity, 'x ', COALESCE(NULLIF(oi.item_name_snapshot, ''), 'Item')) ORDER BY oi.id SEPARATOR ', ') AS items_summary
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            LEFT JOIN order_items oi ON oi.order_id = o.id
+            WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL 2 DAY)
+            GROUP BY o.id, o.receipt_number, o.created_at, o.total_amount, o.payment_status, c.name
+            ORDER BY o.created_at DESC
+            LIMIT 8")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $orderIds = array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $orderRows);
+        $orderIds = array_values(array_filter($orderIds));
+        $ingredientsByOrder = [];
+        if ($orderIds && tableExists($pdo, 'menu_item_recipes')) {
+            $placeholders = implode(',', array_fill(0, count($orderIds), '?'));
+            $ingStmt = $pdo->prepare("SELECT oi.order_id, ing.name
+                FROM order_items oi
+                JOIN menu_item_recipes mr ON mr.menu_item_id = oi.menu_item_id
+                JOIN ingredients ing ON ing.id = mr.ingredient_id AND ing.deleted_at IS NULL
+                WHERE oi.order_id IN ({$placeholders})
+                ORDER BY ing.name");
+            $ingStmt->execute($orderIds);
+            foreach ($ingStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $ingRow) {
+                $oid = (int) ($ingRow['order_id'] ?? 0);
+                $name = trim((string) ($ingRow['name'] ?? ''));
+                if ($oid <= 0 || $name === '') {
+                    continue;
+                }
+                $ingredientsByOrder[$oid][$name] = $name;
+            }
+        }
+
+        foreach ($orderRows as $order) {
+            $status = (string) ($order['payment_status'] ?? '');
+            if (!$prefs['pending_orders'] && $status === 'pending') {
+                continue;
+            }
+            $key = 'order_' . (int) $order['id'];
+            if (in_array($key, $dismissedKeys, true)) {
+                continue;
+            }
+            $customer = (string) ($order['customer_name'] ?? 'Walk-in');
+            $ordered = (string) ($order['items_summary'] ?: 'No items listed');
+            $ingredientNames = array_values($ingredientsByOrder[(int) $order['id']] ?? []);
+            $ingredientText = $ingredientNames ? implode(', ', $ingredientNames) : 'No recipe ingredients recorded';
+            $items[] = [
+                'key' => $key,
+                'kind' => 'order',
+                'severity' => $status === 'pending' ? 'warning' : 'info',
+                'title' => $status === 'pending'
+                    ? ($customer . ' has a pending order')
+                    : ($customer . ' placed an order'),
+                'preview' => 'Ordered: ' . $ordered . "\nIngredients: " . $ingredientText . "\n₱" . number_format((float) ($order['total_amount'] ?? 0), 2),
+                'meta' => trim((string) ($order['receipt_number'] ?? 'POS')),
+                'time' => (string) ($order['created_at'] ?? ''),
+                'href' => 'orders_history.php?focus=' . (int) $order['id'],
+            ];
+        }
+    } catch (Throwable $e) {
+        // Ignore if schema differs.
+    }
+
+    $lowStockHref = hasPermission($pdo, 'inventory.manage') ? 'inventory.php?tab=reordering&filter=low' : 'pos.php';
+    $expiringHref = hasPermission($pdo, 'inventory.manage') ? 'inventory.php?tab=waste&filter=expiring' : 'pos.php';
+
+    if (!empty($prefs['low_stock']) && tableExists($pdo, 'ingredients')) {
+        $lowRows = $pdo->query("SELECT id, name, stock_quantity, unit FROM ingredients
+            WHERE deleted_at IS NULL AND stock_quantity < CASE
+                WHEN unit IN ('liters', 'liter') THEN 1
+                WHEN unit IN ('grams', 'gram') THEN 20
+                ELSE 5
+            END
+            ORDER BY stock_quantity ASC
+            LIMIT 6")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($lowRows as $row) {
+            $key = 'low_stock_item_' . (int) $row['id'];
+            if (in_array($key, $dismissedKeys, true) || in_array('low_stock', $dismissedKeys, true)) {
+                continue;
+            }
+            $qty = rtrim(rtrim(number_format((float) ($row['stock_quantity'] ?? 0), 2, '.', ''), '0'), '.') ?: '0';
+            $items[] = [
+                'key' => $key,
+                'kind' => 'low_stock',
+                'severity' => 'danger',
+                'title' => 'Low stock: ' . (string) ($row['name'] ?? 'Ingredient'),
+                'preview' => sprintf('Only %s %s left. This can make related menu items unavailable.', $qty, (string) ($row['unit'] ?? '')),
+                'meta' => 'Inventory',
+                'time' => date('Y-m-d H:i:s'),
+                'href' => $lowStockHref,
+            ];
+        }
+    }
+
+    if (!empty($prefs['expiring_ingredients']) && tableExists($pdo, 'ingredients')) {
+        $expiringRows = $pdo->query("SELECT id, name, expiration_date, DATEDIFF(expiration_date, CURDATE()) AS days_left
+            FROM ingredients
+            WHERE deleted_at IS NULL
+              AND expiration_date IS NOT NULL
+              AND expiration_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            ORDER BY expiration_date ASC
+            LIMIT 5")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($expiringRows as $row) {
+            $key = 'expiring_item_' . (int) $row['id'];
+            if (in_array($key, $dismissedKeys, true) || in_array('expiring_ingredients', $dismissedKeys, true)) {
+                continue;
+            }
+            $daysLeft = (int) ($row['days_left'] ?? 0);
+            $items[] = [
+                'key' => $key,
+                'kind' => 'expiring',
+                'severity' => $daysLeft < 0 ? 'danger' : 'warning',
+                'title' => ($daysLeft < 0 ? 'Expired: ' : 'Expiring soon: ') . (string) ($row['name'] ?? 'Ingredient'),
+                'preview' => $daysLeft < 0
+                    ? ('Expired on ' . (string) ($row['expiration_date'] ?? ''))
+                    : sprintf('Expires in %d day%s (%s). Not the same as low stock.', $daysLeft, $daysLeft === 1 ? '' : 's', (string) ($row['expiration_date'] ?? '')),
+                'meta' => 'Waste / Expiry',
+                'time' => date('Y-m-d H:i:s'),
+                'href' => $expiringHref,
+            ];
+        }
+    }
+
+    if (!empty($prefs['unavailable_items'])) {
+        $unavailable = getUnavailableMenuItemsSnapshot($pdo, 6);
+        foreach ($unavailable['items'] as $row) {
+            $key = 'unavailable_item_' . (int) ($row['id'] ?? 0);
+            if (in_array($key, $dismissedKeys, true) || in_array('unavailable_items', $dismissedKeys, true)) {
+                continue;
+            }
+            $items[] = [
+                'key' => $key,
+                'kind' => 'unavailable',
+                'severity' => 'danger',
+                'title' => 'Cannot sell: ' . (string) ($row['name'] ?? 'Menu item'),
+                'preview' => (string) ($row['reason'] ?? 'Cannot be ordered right now.'),
+                'meta' => 'POS / Menu',
+                'time' => date('Y-m-d H:i:s'),
+                'href' => hasPermission($pdo, 'menu.manage') ? 'menu_management.php' : 'pos.php',
+            ];
+        }
+    }
+
+    if (!empty($prefs['backup_health']) && tableExists($pdo, 'backups') && !in_array('backup_health', $dismissedKeys, true)) {
+        $latestBackup = $pdo->query("SELECT status, reason, created_at FROM backups ORDER BY created_at DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: null;
+        $latestSuccessfulBackup = $pdo->query("SELECT created_at FROM backups WHERE status = 'success' ORDER BY created_at DESC LIMIT 1")->fetchColumn();
+        $needsBackupAttention = false;
+        $backupTitle = '';
+        $backupBody = '';
+
+        if ($latestBackup && (string) ($latestBackup['status'] ?? '') !== 'success') {
+            $needsBackupAttention = true;
+            $backupTitle = 'Recent backup needs attention.';
+            $backupBody = 'The latest backup did not complete successfully.';
+        } elseif (!$latestSuccessfulBackup) {
+            $needsBackupAttention = true;
+            $backupTitle = 'No successful backup recorded yet.';
+            $backupBody = 'Create a backup to protect current system data.';
+        } elseif (strtotime((string) $latestSuccessfulBackup) < strtotime('-7 days')) {
+            $needsBackupAttention = true;
+            $backupTitle = 'Backup is older than 7 days.';
+            $backupBody = 'Run a new backup to keep recovery points current.';
+        }
+
+        if ($needsBackupAttention) {
+            $items[] = [
+                'key' => 'backup_health',
+                'kind' => 'backup',
+                'severity' => 'info',
+                'title' => $backupTitle,
+                'preview' => $backupBody,
+                'meta' => 'Database',
+                'time' => (string) (($latestBackup['created_at'] ?? '') ?: date('Y-m-d H:i:s')),
+                'href' => 'user_settings.php?tab=database',
+            ];
+        }
+    }
+
+    usort($items, static function (array $a, array $b): int {
+        return strcmp((string) ($b['time'] ?? ''), (string) ($a['time'] ?? ''));
+    });
+
+    $items = array_slice($items, 0, $limit);
+    return [
+        'count' => count($items),
+        'items' => $items,
+    ];
+}
+
 function getRecentMenuAndStockHistory(PDO $pdo, int $limit = 30): array {
     $limit = max(1, min(100, $limit));
     if (!tableExists($pdo, 'audit_logs')) {
@@ -2829,7 +3070,7 @@ function runAutomaticBackup(PDO $pdo, string $reason = 'auto', bool $force = fal
         throw new RuntimeException('Backup directory could not be created.');
     }
 
-    $tables = ['users', 'menu_categories', 'menu_items', 'orders', 'order_items', 'order_payments', 'order_discounts', 'customers', 'promotions', 'inventory_logs'];
+    $tables = ['users', 'menu_categories', 'menu_items', 'menu_item_recipes', 'ingredients', 'inventory_logs', 'customers', 'promotions', 'orders', 'order_items', 'order_payments', 'order_discounts', 'suppliers', 'purchase_orders', 'purchase_order_items', 'backups', 'daily_reconciliations', 'settings'];
     $payload = ['generated_at' => date('c'), 'reason' => $reason, 'tables' => []];
 
     foreach ($tables as $table) {
@@ -2857,6 +3098,53 @@ function runAutomaticBackup(PDO $pdo, string $reason = 'auto', bool $force = fal
         'status' => 'success',
         'reason' => $reason,
     ];
+}
+
+function restoreDatabaseFromBackup(PDO $pdo, string $filePath): array {
+    if (!file_exists($filePath)) {
+        return ['success' => false, 'message' => 'Backup file does not exist.'];
+    }
+
+    $raw = @file_get_contents($filePath);
+    if (!$raw) {
+        return ['success' => false, 'message' => 'Unable to read backup file.'];
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data) || empty($data['tables'])) {
+        return ['success' => false, 'message' => 'Invalid backup JSON payload.'];
+    }
+
+    try {
+        $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
+
+        foreach ($data['tables'] as $table => $rows) {
+            if (!tableExists($pdo, $table) || !is_array($rows)) {
+                continue;
+            }
+
+            $pdo->exec("DELETE FROM `{$table}`");
+
+            if (!empty($rows)) {
+                $cols = array_keys($rows[0]);
+                $escapedCols = array_map(static fn($c) => "`" . str_replace("`", "``", $c) . "`", $cols);
+                $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+                $sql = "INSERT INTO `{$table}` (" . implode(', ', $escapedCols) . ") VALUES ({$placeholders})";
+                $stmt = $pdo->prepare($sql);
+
+                foreach ($rows as $row) {
+                    $stmt->execute(array_values($row));
+                }
+            }
+        }
+
+        $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+
+        return ['success' => true, 'message' => 'Database successfully restored from backup snapshot.'];
+    } catch (Throwable $e) {
+        $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+        return ['success' => false, 'message' => 'Database restore failed: ' . $e->getMessage()];
+    }
 }
 
 function getExpiringIngredients(PDO $pdo, int $days = 30): array {

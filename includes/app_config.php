@@ -18,18 +18,18 @@ function getProjectConfig(): array {
             'password' => '',
         ],
         'mail' => [
-            'enabled' => false,
+            'enabled' => true,
             'host' => '',
             'port' => 587,
             'username' => '',
             'password' => '',
             'auth_enabled' => true,
             'encryption' => 'tls',
-            'from_email' => '',
+            'from_email' => 'noreply@kincafe.local',
             'from_name' => 'Kin Cafe',
-            'reply_to_email' => '',
+            'reply_to_email' => 'support@kincafe.local',
             'reply_to_name' => 'Kin Cafe',
-            'timeout_seconds' => 20,
+            'timeout_seconds' => 15,
         ],
     ];
 
