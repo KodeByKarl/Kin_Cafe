@@ -106,24 +106,40 @@ function getPaymentEntries() {
 
 function getCartSummary() {
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const promotion = getEstimatedPromotion(subtotal);
-    const taxableAmount = Math.max(subtotal - promotion.discountAmount, 0);
-    const tax = 0;
-    const total = taxableAmount;
-    const payments = getPaymentEntries();
     const round = (window.KinCashChange && window.KinCashChange.roundToCents) ? window.KinCashChange.roundToCents : (n) => Math.round((Number(n) || 0) * 100) / 100;
+    
+    const isPwdSeniorEl = document.getElementById('isPwdSenior');
+    const isPwdSenior = isPwdSeniorEl ? isPwdSeniorEl.checked : false;
+
+    let discount = 0;
+    let total = subtotal;
+    let promotionObj = null;
+
+    if (isPwdSenior && subtotal > 0) {
+        const vatExclusive = round(subtotal / 1.12);
+        discount = round(vatExclusive * 0.20);
+        total = round(Math.max(vatExclusive - discount, 0));
+    } else {
+        const promotion = getEstimatedPromotion(subtotal);
+        discount = promotion.discountAmount;
+        total = Math.max(subtotal - discount, 0);
+        promotionObj = promotion.promotion;
+    }
+
+    const payments = getPaymentEntries();
     const paid = round(payments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0));
     const changeFn = (window.KinCashChange && window.KinCashChange.computeChange) ? window.KinCashChange.computeChange : (t, p) => Math.max((Number(p) || 0) - (Number(t) || 0), 0);
     const change = round(changeFn(total, paid));
 
     return {
         subtotal: round(subtotal),
-        discount: round(promotion.discountAmount),
-        tax,
+        discount: round(discount),
+        tax: 0,
         total: round(total),
         paid,
         change,
-        promotion: promotion.promotion,
+        promotion: promotionObj,
+        isPwdSenior
     };
 }
 
@@ -471,6 +487,15 @@ function completeCheckout() {
     }
 
     const payload = buildCheckoutPayload();
+    if (payload.is_pwd_senior && !payload.pwd_senior_id) {
+        showPosMessage('Please enter the PWD / Senior Citizen ID number before completing checkout.', 'warning');
+        const pwdInput = document.getElementById('pwdSeniorId');
+        if (pwdInput) {
+            pwdInput.focus();
+        }
+        return;
+    }
+
     if (!payload.payments.length) {
         showPosMessage('Enter a cash amount before checkout.', 'warning');
         return;
@@ -616,13 +641,21 @@ function printReceipt() {
 
 function clearCheckoutForm(resetMessage = true) {
     cart = [];
-    const ids = ['customerName', 'customerPhone', 'customerEmail', 'promoCode', 'orderNotes', 'paymentAmount1', 'menuSearchInput', 'productCodeInput'];
+    const ids = ['customerName', 'customerPhone', 'customerEmail', 'promoCode', 'orderNotes', 'paymentAmount1', 'menuSearchInput', 'productCodeInput', 'pwdSeniorId'];
     ids.forEach((id) => {
         const el = document.getElementById(id);
         if (el) {
             el.value = '';
         }
     });
+
+    const isPwdSeniorEl = document.getElementById('isPwdSenior');
+    if (isPwdSeniorEl) {
+        isPwdSeniorEl.checked = false;
+    }
+    if (typeof togglePwdSeniorInput === 'function') {
+        togglePwdSeniorInput();
+    }
 
     const paymentMethod1 = document.getElementById('paymentMethod1');
     if (paymentMethod1) paymentMethod1.value = 'cash';

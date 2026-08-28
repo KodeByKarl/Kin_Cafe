@@ -281,6 +281,9 @@ try {
     $taxAmount = 0.0;
 
     if ($isPwdSenior) {
+        if ($pwdSeniorId === '') {
+            throw new InvalidArgumentException('PWD / Senior Citizen ID number is required when applying statutory discount.');
+        }
         $discountType = 'pwd_senior';
         $vatExclusiveSubtotal = round((float) $subtotal / 1.12, 2);
         $discountAmount = round($vatExclusiveSubtotal * 0.20, 2);
