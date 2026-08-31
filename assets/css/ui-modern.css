@@ -2600,16 +2600,16 @@ select.form-control:focus {
 #editRecipeRows,
 #addRecipeRows {
     display: grid;
-    gap: 14px;
+    gap: 18px;
 }
 
 .recipe-row {
     margin: 0 !important;
-    padding: 14px 14px 6px;
+    padding: 20px 18px 14px;
     border: 1px solid rgba(143, 101, 71, 0.18);
     border-radius: 12px;
     background: rgba(255, 250, 244, 0.9);
-    row-gap: 10px;
+    row-gap: 12px;
 }
 
 .recipe-row .form-group {
@@ -3745,6 +3745,121 @@ body.user_settings .main-content {
     color: #8c6d53;
     font-size: 0.9rem;
     margin: 0;
+}
+
+.kc-password-wrap {
+    position: relative;
+    display: block;
+}
+
+.kc-password-wrap .form-control {
+    padding-right: 44px;
+}
+
+.kc-password-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    border: 0;
+    background: transparent;
+    color: #8f6547;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    padding: 0;
+}
+
+.kc-password-toggle svg {
+    width: 18px;
+    height: 18px;
+}
+
+.kc-live-search {
+    position: relative;
+}
+
+.kc-live-search-results {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 40;
+    max-height: 260px;
+    overflow: auto;
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(67, 42, 28, 0.16);
+}
+
+.kc-live-search-flash {
+    outline: 2px solid #0f766e;
+    background: #ecfdf3 !important;
+}
+
+.kc-page-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 12px;
+    color: #6f513d;
+    font-weight: 700;
+    font-size: 0.92rem;
+    text-decoration: none;
+}
+
+.kc-page-back svg {
+    width: 16px;
+    height: 16px;
+}
+
+.kc-page-back:hover {
+    color: #3f2b20;
+    text-decoration: none;
+}
+
+.kc-history-disclosure {
+    border: 1px solid rgba(143, 101, 71, 0.18);
+    border-radius: 16px;
+    background: #fffdfa;
+    margin-bottom: 24px;
+}
+
+.kc-history-disclosure > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 16px 20px;
+    font-weight: 800;
+    color: #3f2b20;
+}
+
+.kc-history-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kc-inventory-tab-back {
+    margin: 0 0 12px;
+}
+
+@keyframes kc-expiry-blink {
+    0%, 100% { background-color: #fff7ed; box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.35); }
+    50% { background-color: #ffedd5; box-shadow: 0 0 0 6px rgba(234, 88, 12, 0); }
+}
+
+@keyframes kc-expired-blink {
+    0%, 100% { background-color: #fef2f2; box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    50% { background-color: #fee2e2; box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+.inventory-table tr.is-expiring-stock,
+.inventory-status-pill.is-expiring {
+    animation: kc-expiry-blink 1.15s ease-in-out infinite;
+}
+
+.inventory-table tr.is-expired-stock,
+.inventory-status-pill.is-expired {
+    animation: kc-expired-blink 0.95s ease-in-out infinite;
 }
 
 

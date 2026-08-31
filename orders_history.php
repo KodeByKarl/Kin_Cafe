@@ -20,9 +20,9 @@ $endDate = trim((string) ($_GET['end'] ?? ''));
 $query = trim((string) ($_GET['q'] ?? ''));
 $method = trim((string) ($_GET['method'] ?? ''));
 $status = trim((string) ($_GET['status'] ?? ''));
-$limit = (int) ($_GET['limit'] ?? 50);
+$limit = (int) ($_GET['limit'] ?? 20);
 $page = (int) ($_GET['page'] ?? 1);
-if ($limit <= 0 || $limit > 200) $limit = 50;
+if ($limit <= 0 || $limit > 200) $limit = 20;
 if ($page <= 0) $page = 1;
 $offset = ($page - 1) * $limit;
 
@@ -110,6 +110,7 @@ include 'includes/header.php';
 <div class="main-content orders-history-page" data-orders-poll-ms="3000" data-orders-hidden-poll-ms="5000">
     <div class="page-hero orders-hero">
         <div>
+            <?php renderPageBackButton('dashboard.php', 'Back to Dashboard'); ?>
             <h1 class="page-title">Order History</h1>
             <p class="page-subtitle">Track and manage all cafe transactions.</p>
             <small class="text-muted" id="ordersLiveStatus">Auto-updating every few seconds.</small>
@@ -216,7 +217,7 @@ include 'includes/header.php';
                     <input type="hidden" name="tab" value="<?php echo htmlspecialchars((string) $_GET['tab']); ?>">
                 <?php endif; ?>
                 <div class="orders-filter-field orders-search-field">
-                    <input type="text" class="form-control" name="q" value="<?php echo htmlspecialchars($query); ?>" placeholder="Search receipt or customer...">
+                    <input type="text" class="form-control" name="q" id="ordersSearchInput" value="<?php echo htmlspecialchars($query); ?>" placeholder="Search receipt or customer..." data-live-search-target="#ordersTable tbody tr" autocomplete="off">
                 </div>
                 <div class="orders-filter-field">
                     <input type="date" class="form-control" name="start" value="<?php echo htmlspecialchars($startDate); ?>">
@@ -269,7 +270,7 @@ include 'includes/header.php';
                                 $statusLabel = $transactionStatus === 'cancelled' ? 'CANCELLED' : strtoupper((string) $o['payment_status']);
                             ?>
                             <tr>
-                                <td><?php echo htmlspecialchars(date('Y-m-d H:i:s', strtotime((string) $o['created_at']))); ?></td>
+                                <td><?php echo htmlspecialchars(formatAppDateTime((string) $o['created_at'])); ?></td>
                                 <td class="orders-receipt-cell"><?php echo htmlspecialchars((string) $o['receipt_number']); ?></td>
                                 <td class="orders-customer-cell"><?php echo htmlspecialchars((string) $o['customer_name']); ?></td>
                                 <td class="orders-method-cell"><?php echo htmlspecialchars(strtoupper((string) $o['payment_method'])); ?></td>
@@ -348,7 +349,11 @@ function escapeHtml(s) {
 }
 
 function fmtMoney(n) {
-    return Number(n || 0).toFixed(2);
+    const value = Number(n || 0);
+    if (!Number.isFinite(value)) {
+        return '0.00';
+    }
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDateTime(value) {
@@ -359,8 +364,14 @@ function fmtDateTime(value) {
     if (Number.isNaN(d.getTime())) {
         return String(value);
     }
-    const pad = (num) => String(num).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    return d.toLocaleString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
 }
 
 function fmtPendingMeta(value) {

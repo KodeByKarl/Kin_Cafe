@@ -12,7 +12,12 @@ require_once 'includes/mailer.php';
 $title = 'User Settings';
 $errors = [];
 $success = '';
-$activeSettingsTab = isset($_GET['tab']) && in_array($_GET['tab'], ['profile', 'security', 'users', 'notifications', 'general', 'database', 'history'], true) ? $_GET['tab'] : 'profile';
+$settingsPanels = ['profile', 'security', 'users', 'notifications', 'general', 'database', 'history'];
+$requestedSettingsPanel = (string) ($_GET['panel'] ?? $_GET['view'] ?? '');
+if ($requestedSettingsPanel === '' && isset($_GET['tab']) && in_array($_GET['tab'], $settingsPanels, true)) {
+    $requestedSettingsPanel = (string) $_GET['tab'];
+}
+$activeSettingsTab = in_array($requestedSettingsPanel, $settingsPanels, true) ? $requestedSettingsPanel : 'profile';
 $userId = (int) $_SESSION['admin'];
 requirePermission($pdo, 'dashboard.view');
 $currentUserRole = getCurrentUserRole($pdo);
@@ -482,7 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'download_backup') {
         $activeSettingsTab = 'database';
         $fileName = basename(trim((string) ($_POST['file_name'] ?? '')));
-        $backupDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
+        $backupDir = getBackupDirectory();
         $filePath = $backupDir . DIRECTORY_SEPARATOR . $fileName;
 
         if ($fileName === '' || !file_exists($filePath)) {
@@ -500,7 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Only supervisors can restore database backups.';
         } else {
             $fileName = basename(trim((string) ($_POST['file_name'] ?? '')));
-            $backupDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
+            $backupDir = getBackupDirectory();
             $filePath = $backupDir . DIRECTORY_SEPARATOR . $fileName;
 
             if ($fileName === '' || !file_exists($filePath)) {
@@ -560,7 +565,7 @@ if ($notificationPreferences['low_stock'] && $lowStockCount > 0 && !in_array('lo
         'title' => $lowStockCount . ' ingredient' . ($lowStockCount === 1 ? ' is' : 's are') . ' low on stock.',
         'body' => 'Restock soon to avoid unavailable menu items during service.',
         'meta' => 'Inventory module',
-        'action_href' => 'inventory.php?tab=reordering&filter=low',
+        'action_href' => 'inventory.php?panel=reordering&filter=low',
         'action_label' => 'Review reorder list',
     ];
 }
@@ -574,7 +579,7 @@ if ($notificationPreferences['expiring_ingredients'] && $expiringCount > 0 && !i
         'title' => $expiringCount . ' ingredient' . ($expiringCount === 1 ? '' : 's') . ' expire within 30 days.',
         'body' => 'Check stock rotation and remove affected items if needed.',
         'meta' => 'Inventory module',
-        'action_href' => 'inventory.php?tab=waste&filter=expiring',
+        'action_href' => 'inventory.php?panel=waste&filter=expiring',
         'action_label' => 'Review expiring stock',
     ];
 }
@@ -659,6 +664,7 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
 <div class="main-content settings-admin-page">
     <div class="page-hero">
         <div>
+            <?php renderPageBackButton('dashboard.php', 'Back to Dashboard'); ?>
             <h1 class="page-title">Settings</h1>
             <p class="page-subtitle">Manage your account, users, and system preferences.</p>
         </div>
@@ -949,8 +955,8 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
             <section class="settings-tab-panel<?php echo $activeSettingsTab === 'history' ? ' active' : ''; ?>" data-panel="history">
                 <div class="card settings-card settings-summary-card">
                     <div class="card-body">
-                        <h2>Menu &amp; Stock Activity</h2>
-                        <p class="text-muted mb-0">Who edited menu items or reduced/increased ingredient stock — including staff name and timestamp.</p>
+                        <h2>Activity History</h2>
+                        <p class="text-muted mb-0">Menu edits, stock changes, saved orders, and completed orders — including staff name and timestamp.</p>
                     </div>
                 </div>
                 <div class="card settings-card">

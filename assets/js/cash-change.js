@@ -23,7 +23,13 @@
         if (hasComma && hasDot) {
             normalized = normalized.replace(/,/g, '');
         } else if (hasComma && !hasDot) {
-            normalized = normalized.replace(/,/g, '.');
+            const parts = cleaned.split(',');
+            const last = parts[parts.length - 1] || '';
+            if (parts.length > 1 && last.length === 3) {
+                normalized = parts.join('');
+            } else {
+                normalized = normalized.replace(/,/g, '.');
+            }
         }
         normalized = normalized.replace(/[^\d.-]/g, '');
         const n = Number(normalized);

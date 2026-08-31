@@ -25,7 +25,7 @@ $feature = getAiSmartReorderingData($pdo);
         </div>
         <div class="analytics-hero-actions">
             <a class="btn btn-outline-secondary" href="ai_insights.php">AI Suite</a>
-            <a class="btn btn-outline-secondary" href="inventory.php?tab=reordering">Inventory Tab</a>
+            <a class="btn btn-outline-secondary" href="inventory.php?panel=reordering">Inventory Tab</a>
         </div>
     </div>
 
@@ -62,7 +62,7 @@ $feature = getAiSmartReorderingData($pdo);
             </ul>
             <div class="ai-module-link-row">
                 <a class="btn btn-outline-secondary" href="ai_sales_forecasting.php">Open Sales Forecasting</a>
-                <a class="btn btn-outline-secondary" href="inventory.php?tab=reordering">Open Inventory Reordering</a>
+                <a class="btn btn-outline-secondary" href="inventory.php?panel=reordering">Open Inventory Reordering</a>
             </div>
         </div>
     </section>

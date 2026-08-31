@@ -416,6 +416,8 @@ $logs = $pdo->query("SELECT il.*, mi.name AS item_name, ing.name AS ingredient_n
     ORDER BY il.timestamp DESC
     LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
 
+syncAutomatedStockCeilings($pdo);
+
 $ingredients = $pdo->query('SELECT id, name, stock_quantity FROM ingredients WHERE deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $allIngredients = $pdo->query('SELECT *, DATEDIFF(expiration_date, CURDATE()) AS days_to_expiry FROM ingredients WHERE deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $archivedIngredients = $pdo->query('SELECT *, DATEDIFF(expiration_date, CURDATE()) AS days_to_expiry FROM ingredients WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')->fetchAll(PDO::FETCH_ASSOC);
@@ -435,6 +437,7 @@ function formatStockQuantity($quantity) {
 <div class="main-content inventory-admin-page">
     <div class="page-hero inventory-hero">
         <div>
+            <?php renderPageBackButton('dashboard.php', 'Back to Dashboard'); ?>
             <h1 class="page-title">Inventory Management</h1>
             <p class="page-subtitle">Track ingredients, stock levels, and expiration dates.</p>
         </div>
@@ -499,6 +502,7 @@ function formatStockQuantity($quantity) {
                 <li class="nav-item"><button type="button" class="nav-link" data-inventory-tab="reordering" role="tab" aria-selected="false">Smart Reordering</button></li>
                 <li class="nav-item"><button type="button" class="nav-link" data-inventory-tab="waste" role="tab" aria-selected="false">Waste Reduction</button></li>
             </ul>
+            <button type="button" class="btn btn-sm btn-outline-secondary kc-inventory-tab-back" id="inventoryTabBack" hidden>Back to Stock</button>
         </div>
     </div>
 
@@ -507,7 +511,7 @@ function formatStockQuantity($quantity) {
     <div class="card inventory-table-card">
         <div class="inventory-toolbar">
             <div class="inventory-search-wrap">
-                <input type="text" id="inventorySearchInput" class="form-control" placeholder="Search ingredients...">
+                <input type="text" id="inventorySearchInput" class="form-control" placeholder="Search ingredients..." data-live-search-target="#inventoryTable tbody tr" data-live-search-filter="off" autocomplete="off">
             </div>
             <div class="inventory-filter-pills">
                 <button type="button" class="active" onclick="filterInventoryTable('all', this)">All</button>
@@ -541,9 +545,14 @@ function formatStockQuantity($quantity) {
                             $stockQuantityNumber = (float) $ingredient['stock_quantity'];
                             $unit = strtolower((string) $ingredient['unit']);
                             $lowStockThreshold = $unit === 'liters' || $unit === 'liter' ? 1 : ($unit === 'grams' || $unit === 'gram' ? 20 : 5);
+                            $maxStock = (float) ($ingredient['max_stock'] ?? 100);
+                            if ($maxStock <= 0) {
+                                $maxStock = 100;
+                            }
+                            $healthPercent = min(100, max(0, ($stockQuantityNumber / $maxStock) * 100));
                             $statusLabel = 'Healthy';
                             $statusClass = 'healthy';
-                            if ($stockQuantityNumber < $lowStockThreshold) {
+                            if ($stockQuantityNumber < $lowStockThreshold || $healthPercent <= 5) {
                                 $statusLabel = 'Low Stock';
                                 $statusClass = 'low';
                             } elseif ($daysToExpiry !== null && $daysToExpiry < 0) {
@@ -553,8 +562,9 @@ function formatStockQuantity($quantity) {
                                 $statusLabel = 'Expiring';
                                 $statusClass = 'expiring';
                             }
+                            $rowPulseClass = $statusClass === 'low' ? 'is-low-stock' : ($statusClass === 'expiring' ? 'is-expiring-stock' : ($statusClass === 'expired' ? 'is-expired-stock' : ''));
                         ?>
-                        <tr data-status="<?php echo htmlspecialchars(strtolower($statusLabel)); ?>" class="<?php echo $statusClass === 'low' ? 'is-low-stock' : ''; ?>">
+                        <tr data-status="<?php echo htmlspecialchars(strtolower($statusLabel)); ?>" class="<?php echo $rowPulseClass; ?>">
                             <td data-name="<?php echo htmlspecialchars(strtolower((string) $ingredient['name'])); ?>">
                                 <div class="inventory-name-cell">
                                     <span class="inventory-avatar"><?php echo htmlspecialchars(strtoupper(substr((string) $ingredient['name'], 0, 1))); ?></span>
@@ -793,8 +803,9 @@ function formatStockQuantity($quantity) {
                         <input type="number" name="stock_quantity" class="form-control" step="0.01" min="0.01" value="1" placeholder="0.00" required>
                     </div>
                     <div class="form-group">
-                        <label>Max Stock Capacity</label>
-                        <input type="number" name="max_stock" class="form-control" step="0.01" min="0.01" value="100" placeholder="100" title="Maximum stock level for the healthbar">
+                        <label>Stock ceiling</label>
+                        <input type="number" name="max_stock" class="form-control" step="0.01" min="0.01" value="100" placeholder="Auto" title="Automatically raised when received stock exceeds this ceiling">
+                        <small class="form-text text-muted">Raised automatically when stock goes above this level.</small>
                     </div>
                     <div class="form-group">
                         <label>Unit Cost (₱ per unit)</label>
@@ -889,8 +900,9 @@ function formatStockQuantity($quantity) {
                         <input type="number" name="stock_quantity" id="editIngredientStockQuantity" class="form-control" step="0.01" min="0" value="0" placeholder="0.00" required>
                     </div>
                     <div class="form-group">
-                        <label>Max Stock Capacity</label>
-                        <input type="number" name="max_stock" id="editIngredientMaxStock" class="form-control" step="0.01" min="0.01" value="100" placeholder="100" title="Maximum stock level for the healthbar">
+                        <label>Stock ceiling</label>
+                        <input type="number" name="max_stock" id="editIngredientMaxStock" class="form-control" step="0.01" min="0.01" value="100" placeholder="Auto" title="Automatically raised when received stock exceeds this ceiling">
+                        <small class="form-text text-muted">Raised automatically when stock goes above this level.</small>
                     </div>
                     <div class="form-group">
                         <label>Unit Cost (₱ per unit)</label>
@@ -1130,6 +1142,10 @@ function initInventoryFeatureTabs() {
             panel.classList.toggle('active', isActive);
             panel.hidden = !isActive;
         });
+        const back = document.getElementById('inventoryTabBack');
+        if (back) {
+            back.hidden = target === 'stock';
+        }
     }
 
     tabButtons.forEach((button) => {
@@ -1139,15 +1155,23 @@ function initInventoryFeatureTabs() {
     });
 
     const params = new URLSearchParams(window.location.search);
-    const requestedTab = params.get('tab');
+    const requestedTab = params.get('panel') || params.get('inv') || params.get('tab');
     const tabAliasMap = {
         'smart-reordering': 'reordering',
         'inventory-optimization': 'optimization',
         'waste-reduction': 'waste',
     };
     const resolvedTab = tabAliasMap[requestedTab] || requestedTab;
-    if (resolvedTab) {
+    const knownTabs = ['stock', 'optimization', 'reordering', 'waste'];
+    if (knownTabs.indexOf(resolvedTab) !== -1) {
         activateInventoryTab(resolvedTab);
+    }
+
+    const back = document.getElementById('inventoryTabBack');
+    if (back) {
+        back.addEventListener('click', function () {
+            activateInventoryTab('stock');
+        });
     }
 
     const requestedFilter = params.get('filter');

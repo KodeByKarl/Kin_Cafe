@@ -176,7 +176,7 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
                         </ul>
                         <div class="mt-2">
                             <?php if (hasPermission($pdo, 'inventory.manage')): ?>
-                                <a class="btn btn-sm btn-outline-secondary" href="inventory.php?tab=reordering&filter=low">Open Inventory</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="inventory.php?panel=reordering&filter=low">Open Inventory</a>
                             <?php endif; ?>
                             <?php if (hasPermission($pdo, 'menu.manage')): ?>
                                 <a class="btn btn-sm btn-outline-secondary" href="menu_management.php">Open Menu</a>
@@ -216,24 +216,25 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
                         </span>
                         <span>Current Order</span>
                     </div>
+                    <button type="button" class="pos-cart-toggle" id="posCartToggle" aria-expanded="true" title="Hide cart">Hide cart</button>
                     <button type="button" class="pos-clear-btn" onclick="clearCheckoutForm()">Clear</button>
                 </div>
                 <div class="pos-modern-body">
                     <div id="posMessage"></div>
                     <div class="order-items pos-cart-items" id="cart-items"></div>
 
-                    <section class="pos-recommendations-panel" id="posRecommendationsPanel" aria-live="polite">
-                        <div class="pos-recommendations-head">
+                    <details class="pos-recommendations-panel" id="posRecommendationsPanel">
+                        <summary class="pos-recommendations-head">
                             <div>
                                 <h3>Recommended Add-ons</h3>
                                 <p class="pos-recommendations-subtitle"><?php echo htmlspecialchars((string) ($posRecommendations['method_label'] ?? aiRecommendationMethodLabel())); ?></p>
                             </div>
-                            <a class="pos-recommendations-link" href="ai_recommendation_system.php">View all</a>
-                        </div>
+                            <button type="button" class="pos-recommendations-link" id="posRecommendationsViewAll">View all</button>
+                        </summary>
                         <div class="pos-recommendations-list" id="posRecommendationsList">
                             <p class="pos-recommendations-empty">Add an item to the cart to see pairing suggestions.</p>
                         </div>
-                    </section>
+                    </details>
 
                     <div class="pos-order-form">
                         <div class="pos-order-payment-grid">
@@ -243,7 +244,7 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
                             </div>
                             <div class="pos-field-group">
                                 <label class="pos-field-label" for="paymentAmount1">Amount Paid</label>
-                                <input type="number" step="0.01" min="0" id="paymentAmount1" class="form-control" placeholder="0.00" oninput="updateCartDisplay()">
+                                <input type="text" inputmode="decimal" id="paymentAmount1" class="form-control" placeholder="0.00" oninput="updateCartDisplay()" autocomplete="off">
                             </div>
                         </div>
 
@@ -270,6 +271,7 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
 
                         <div class="pos-order-summary">
                             <div class="pos-order-summary-row"><span>Subtotal</span><strong>₱<span id="cart-subtotal">0.00</span></strong></div>
+                            <div class="pos-order-summary-row" id="cart-discount-row" hidden><span>Discount</span><strong>- ₱<span id="cart-discount">0.00</span></strong></div>
                             <div class="pos-order-summary-total"><span>Total</span><strong>₱<span id="cart-total">0.00</span></strong></div>
                             <div class="pos-order-summary-row pos-order-summary-meta"><span>Amount Paid</span><strong>₱<span id="cart-paid">0.00</span></strong></div>
                             <div class="pos-order-summary-row pos-order-summary-meta"><span>Change</span><strong>₱<span id="cart-change">0.00</span></strong></div>
@@ -515,7 +517,73 @@ function initPosAssistantPanel() {
 document.addEventListener('DOMContentLoaded', function () {
     updatePosRecommendations();
     initPosAssistantPanel();
+    initPosCartToggle();
+    initPosRecommendationsViewAll();
 });
+
+function initPosCartToggle() {
+    const layout = document.querySelector('.pos-container');
+    const toggle = document.getElementById('posCartToggle');
+    if (!layout || !toggle) {
+        return;
+    }
+    const collapsed = sessionStorage.getItem('kc_pos_cart_collapsed') === '1';
+    layout.classList.toggle('pos-cart-collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    toggle.textContent = collapsed ? 'Show cart' : 'Hide cart';
+    toggle.addEventListener('click', function () {
+        const next = !layout.classList.contains('pos-cart-collapsed');
+        layout.classList.toggle('pos-cart-collapsed', next);
+        toggle.setAttribute('aria-expanded', next ? 'false' : 'true');
+        toggle.textContent = next ? 'Show cart' : 'Hide cart';
+        sessionStorage.setItem('kc_pos_cart_collapsed', next ? '1' : '0');
+    });
+}
+
+function initPosRecommendationsViewAll() {
+    const button = document.getElementById('posRecommendationsViewAll');
+    if (!button) {
+        return;
+    }
+    button.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const config = window.POS_CONFIG && window.POS_CONFIG.recommendations;
+        const lines = [];
+        function addRow(row) {
+            const item = row && row.item ? row.item : null;
+            const name = item && item.name ? String(item.name) : String(row.recommended_item || '');
+            if (!name) {
+                return;
+            }
+            const anchor = String(row.anchor_item || '');
+            const reason = String(row.reason || '');
+            lines.push((anchor ? (anchor + ' → ' + name) : name) + (reason ? (' — ' + reason) : ''));
+        }
+        if (config && Array.isArray(config.pairs)) {
+            config.pairs.forEach(addRow);
+        }
+        if (config && Array.isArray(config.popular)) {
+            config.popular.forEach(addRow);
+        }
+        const list = document.getElementById('posRecommendationsList');
+        if (!lines.length && list) {
+            list.querySelectorAll('.pos-recommendation-card strong').forEach((el) => {
+                lines.push(el.textContent);
+            });
+        }
+        const message = lines.length
+            ? lines.join('\n')
+            : 'Add items to the cart to see pairing suggestions. Pairings come from completed-order patterns.';
+        if (window.KinAlertModal) {
+            window.KinAlertModal.alert(message, 'Recommended add-ons', 'Close');
+        }
+        const panel = document.getElementById('posRecommendationsPanel');
+        if (panel && panel.tagName === 'DETAILS') {
+            panel.open = true;
+        }
+    });
+}
 
 function togglePwdSeniorInput() {
     const isChecked = document.getElementById('isPwdSenior')?.checked;

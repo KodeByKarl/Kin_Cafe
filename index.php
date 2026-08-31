@@ -358,10 +358,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
         }
 
-        .login-field input:focus {
-            border-color: rgba(111, 74, 51, 0.45);
-            background: #fff;
-            box-shadow: 0 0 0 4px rgba(111, 74, 51, 0.12);
+        .login-field .kc-password-wrap {
+            position: relative;
+        }
+
+        .login-field .kc-password-wrap input {
+            padding-right: 52px;
+        }
+
+        .kc-password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border: 0;
+            background: transparent;
+            color: rgba(42, 29, 22, 0.55);
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            padding: 0;
+        }
+
+        .kc-password-toggle svg {
+            width: 20px;
+            height: 20px;
         }
 
         .login-form-meta {
@@ -593,10 +616,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     (function () {
         const key = 'kc_tab_id';
         const params = new URLSearchParams(window.location.search);
+        const isSessionTab = function (value) {
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '')) || String(value || '') === 'default' || /^[0-9a-f]{20,}$/i.test(String(value || ''));
+        };
         let tab = params.get('tab');
-        if (!tab) {
+        if (!tab || !isSessionTab(tab)) {
             tab = sessionStorage.getItem(key);
-            if (!tab) {
+            if (!tab || !isSessionTab(tab)) {
                 tab = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(16).slice(2) + Date.now().toString(16));
                 sessionStorage.setItem(key, tab);
             }
@@ -627,5 +653,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         setPanelState(panel.classList.contains('is-open'));
     })();
     </script>
+    <script src="assets/js/password-toggle.js"></script>
 </body>
 </html>

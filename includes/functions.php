@@ -9,6 +9,46 @@ function tableExists(PDO $pdo, string $tableName): bool {
     return (bool) $stmt->fetchColumn();
 }
 
+function formatAppDateTime(?string $value, string $empty = ''): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return $empty;
+    }
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return $value;
+    }
+    return date('M d, Y g:i A', $timestamp);
+}
+
+function formatMoney($amount): string {
+    return number_format((float) $amount, 2);
+}
+
+function getBackupDirectory(): string {
+    return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
+}
+
+function renderPageBackButton(string $href = 'dashboard.php', string $label = 'Back'): void {
+    echo '<a class="kc-page-back" href="' . htmlspecialchars($href) . '">'
+        . '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5.5 8.5 12 15 18.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        . '<span>' . htmlspecialchars($label) . '</span></a>';
+}
+
+function syncAutomatedStockCeilings(PDO $pdo): void {
+    if (!tableExists($pdo, 'ingredients') || !columnExists($pdo, 'ingredients', 'max_stock')) {
+        return;
+    }
+    try {
+        $pdo->exec("UPDATE ingredients
+            SET max_stock = stock_quantity
+            WHERE deleted_at IS NULL
+              AND stock_quantity > GREATEST(COALESCE(max_stock, 0), 0)");
+    } catch (Throwable $e) {
+        // Schema differences should not block inventory.
+    }
+}
+
 function columnExists(PDO $pdo, string $tableName, string $columnName): bool {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?");
     $stmt->execute([$tableName, $columnName]);
@@ -556,13 +596,26 @@ function ensureSystemSchema(PDO $pdo): void {
     $initialized = true;
 }
 
-function authTabId(): string {
-    $tab = (string) ($_GET['tab'] ?? ($_SESSION['kc_tab'] ?? 'default'));
-    $tab = preg_replace('/[^a-zA-Z0-9_-]/', '', $tab);
-    if ($tab === '') {
-        $tab = 'default';
+function authIsSessionTabId(string $tab): bool {
+    if ($tab === 'default') {
+        return true;
     }
-    return substr($tab, 0, 64);
+    if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $tab)) {
+        return true;
+    }
+    return (bool) preg_match('/^[0-9a-f]{20,}$/i', $tab);
+}
+
+function authTabId(): string {
+    $fromGet = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_GET['tab'] ?? ''));
+    $fromSession = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_SESSION['kc_tab'] ?? 'default'));
+    if ($fromGet !== '' && authIsSessionTabId($fromGet)) {
+        return substr($fromGet, 0, 64);
+    }
+    if ($fromSession !== '') {
+        return substr($fromSession, 0, 64);
+    }
+    return 'default';
 }
 
 function authMultiAccountEnabled(PDO $pdo): bool {
@@ -2221,6 +2274,10 @@ function getStaffNotificationFeed(PDO $pdo, ?int $userId = null, int $limit = 16
             $ordered = (string) ($order['items_summary'] ?: 'No items listed');
             $ingredientNames = array_values($ingredientsByOrder[(int) $order['id']] ?? []);
             $ingredientText = $ingredientNames ? implode(', ', $ingredientNames) : 'No recipe ingredients recorded';
+            $receiptNo = trim((string) ($order['receipt_number'] ?? 'POS'));
+            $totalText = '₱' . formatMoney((float) ($order['total_amount'] ?? 0));
+            $statusLabel = $status === 'pending' ? 'Pending' : ucfirst($status);
+            $details = "Receipt: {$receiptNo}\nCustomer: {$customer}\nStatus: {$statusLabel}\nItems: {$ordered}\nIngredients: {$ingredientText}\nTotal: {$totalText}\nTime: " . formatAppDateTime((string) ($order['created_at'] ?? ''));
             $items[] = [
                 'key' => $key,
                 'kind' => 'order',
@@ -2228,8 +2285,9 @@ function getStaffNotificationFeed(PDO $pdo, ?int $userId = null, int $limit = 16
                 'title' => $status === 'pending'
                     ? ($customer . ' has a pending order')
                     : ($customer . ' placed an order'),
-                'preview' => 'Ordered: ' . $ordered . "\nIngredients: " . $ingredientText . "\n₱" . number_format((float) ($order['total_amount'] ?? 0), 2),
-                'meta' => trim((string) ($order['receipt_number'] ?? 'POS')),
+                'preview' => 'Ordered: ' . $ordered . "\nIngredients: " . $ingredientText . "\n" . $totalText,
+                'details' => $details,
+                'meta' => $receiptNo,
                 'time' => (string) ($order['created_at'] ?? ''),
                 'href' => 'orders_history.php?focus=' . (int) $order['id'],
             ];
@@ -2238,30 +2296,48 @@ function getStaffNotificationFeed(PDO $pdo, ?int $userId = null, int $limit = 16
         // Ignore if schema differs.
     }
 
-    $lowStockHref = hasPermission($pdo, 'inventory.manage') ? 'inventory.php?tab=reordering&filter=low' : 'pos.php';
-    $expiringHref = hasPermission($pdo, 'inventory.manage') ? 'inventory.php?tab=waste&filter=expiring' : 'pos.php';
+    $lowStockHref = hasPermission($pdo, 'inventory.manage') ? 'inventory.php?panel=reordering&filter=low' : 'pos.php';
+    $expiringHref = hasPermission($pdo, 'inventory.manage') ? 'inventory.php?panel=waste&filter=expiring' : 'pos.php';
 
     if (!empty($prefs['low_stock']) && tableExists($pdo, 'ingredients')) {
-        $lowRows = $pdo->query("SELECT id, name, stock_quantity, unit FROM ingredients
+        $hasMaxStock = columnExists($pdo, 'ingredients', 'max_stock');
+        $lowSql = $hasMaxStock
+            ? "SELECT id, name, stock_quantity, unit, COALESCE(NULLIF(max_stock, 0), 100) AS max_stock FROM ingredients
+            WHERE deleted_at IS NULL AND (
+                stock_quantity < CASE
+                    WHEN unit IN ('liters', 'liter') THEN 1
+                    WHEN unit IN ('grams', 'gram') THEN 20
+                    ELSE 5
+                END
+                OR stock_quantity <= (GREATEST(COALESCE(NULLIF(max_stock, 0), 100), 1) * 0.05)
+            )
+            ORDER BY stock_quantity ASC
+            LIMIT 8"
+            : "SELECT id, name, stock_quantity, unit, 100 AS max_stock FROM ingredients
             WHERE deleted_at IS NULL AND stock_quantity < CASE
                 WHEN unit IN ('liters', 'liter') THEN 1
                 WHEN unit IN ('grams', 'gram') THEN 20
                 ELSE 5
             END
             ORDER BY stock_quantity ASC
-            LIMIT 6")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            LIMIT 8";
+        $lowRows = $pdo->query($lowSql)->fetchAll(PDO::FETCH_ASSOC) ?: [];
         foreach ($lowRows as $row) {
             $key = 'low_stock_item_' . (int) $row['id'];
             if (in_array($key, $dismissedKeys, true) || in_array('low_stock', $dismissedKeys, true)) {
                 continue;
             }
             $qty = rtrim(rtrim(number_format((float) ($row['stock_quantity'] ?? 0), 2, '.', ''), '0'), '.') ?: '0';
+            $maxStock = (float) ($row['max_stock'] ?? 100);
+            $level = $maxStock > 0 ? round(((float) ($row['stock_quantity'] ?? 0) / $maxStock) * 100, 0) : 0;
+            $preview = sprintf('Only %s %s left (level %s%% of ceiling). This can make related menu items unavailable.', $qty, (string) ($row['unit'] ?? ''), $level);
             $items[] = [
                 'key' => $key,
                 'kind' => 'low_stock',
                 'severity' => 'danger',
                 'title' => 'Low stock: ' . (string) ($row['name'] ?? 'Ingredient'),
-                'preview' => sprintf('Only %s %s left. This can make related menu items unavailable.', $qty, (string) ($row['unit'] ?? '')),
+                'preview' => $preview,
+                'details' => "Ingredient: " . (string) ($row['name'] ?? 'Ingredient') . "\nOn hand: {$qty} " . (string) ($row['unit'] ?? '') . "\nCeiling: " . rtrim(rtrim(number_format($maxStock, 2, '.', ''), '0'), '.') . "\nLevel: {$level}%\nAlert: at or below 5% of ceiling, or below the unit threshold.",
                 'meta' => 'Inventory',
                 'time' => date('Y-m-d H:i:s'),
                 'href' => $lowStockHref,
@@ -2348,7 +2424,7 @@ function getStaffNotificationFeed(PDO $pdo, ?int $userId = null, int $limit = 16
                 'preview' => $backupBody,
                 'meta' => 'Database',
                 'time' => (string) (($latestBackup['created_at'] ?? '') ?: date('Y-m-d H:i:s')),
-                'href' => 'user_settings.php?tab=database',
+                'href' => 'user_settings.php?panel=database',
             ];
         }
     }
@@ -2358,6 +2434,13 @@ function getStaffNotificationFeed(PDO $pdo, ?int $userId = null, int $limit = 16
     });
 
     $items = array_slice($items, 0, $limit);
+    foreach ($items as &$item) {
+        if (empty($item['details'])) {
+            $item['details'] = trim((string) ($item['title'] ?? '') . "\n\n" . (string) ($item['preview'] ?? ''));
+        }
+        $item['time'] = formatAppDateTime((string) ($item['time'] ?? ''), (string) ($item['time'] ?? ''));
+    }
+    unset($item);
     return [
         'count' => count($items),
         'items' => $items,
@@ -2376,6 +2459,7 @@ function getRecentMenuAndStockHistory(PDO $pdo, int $limit = 30): array {
         LEFT JOIN users u ON u.id = a.user_id
         WHERE (a.entity_type = 'menu_item' AND a.action IN ('menu_item_created', 'menu_item_updated', 'menu_item_deleted', 'menu_item_availability_toggled', 'menu_item_image_updated'))
            OR (a.entity_type = 'ingredient' AND a.action IN ('ingredient_stock_adjusted', 'ingredient_updated', 'ingredient_created', 'ingredient_deleted'))
+           OR (a.entity_type = 'order' AND a.action IN ('order_created', 'order_completed', 'order_cancelled'))
         ORDER BY a.id DESC
         LIMIT {$limit}");
     $stmt->execute();
@@ -2419,6 +2503,15 @@ function getRecentMenuAndStockHistory(PDO $pdo, int $limit = 30): array {
             $label = 'Added ingredient';
         } elseif ($action === 'ingredient_deleted') {
             $label = 'Archived/deleted ingredient';
+        } elseif ($action === 'order_created') {
+            $label = 'Saved pending order';
+            $summary = (string) ($details['receipt_number'] ?? $summary);
+        } elseif ($action === 'order_completed') {
+            $label = 'Completed order';
+            $summary = (string) ($details['receipt_number'] ?? $summary);
+        } elseif ($action === 'order_cancelled') {
+            $label = 'Cancelled order';
+            $summary = (string) ($details['receipt_number'] ?? $summary);
         }
 
         $history[] = [
@@ -2429,7 +2522,7 @@ function getRecentMenuAndStockHistory(PDO $pdo, int $limit = 30): array {
             'summary' => $summary,
             'entity_type' => (string) ($row['entity_type'] ?? ''),
             'entity_id' => (int) ($row['entity_id'] ?? 0),
-            'created_at' => (string) ($row['created_at'] ?? ''),
+            'created_at' => formatAppDateTime((string) ($row['created_at'] ?? '')),
             'details' => $details,
         ];
     }
@@ -3065,7 +3158,7 @@ function runAutomaticBackup(PDO $pdo, string $reason = 'auto', bool $force = fal
         return $lastBackup;
     }
 
-    $backupDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
+    $backupDir = getBackupDirectory();
     if (!is_dir($backupDir) && !mkdir($backupDir, 0777, true) && !is_dir($backupDir)) {
         throw new RuntimeException('Backup directory could not be created.');
     }
@@ -3179,7 +3272,7 @@ function checkAndRunScheduledBackup(PDO $pdo): ?array {
         return null;
     }
 
-    $lockPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups' . DIRECTORY_SEPARATOR . '.scheduled-backup.lock';
+    $lockPath = getBackupDirectory() . DIRECTORY_SEPARATOR . '.scheduled-backup.lock';
     $lockDir = dirname($lockPath);
     if (!is_dir($lockDir) && !@mkdir($lockDir, 0777, true) && !is_dir($lockDir)) {
         return null;

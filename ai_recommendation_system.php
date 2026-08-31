@@ -9,7 +9,7 @@ require 'includes/db.php';
 require_once 'includes/functions.php';
 require_once 'includes/ai_modules.php';
 
-requirePermission($pdo, 'reports.view');
+requirePermission($pdo, hasPermission($pdo, 'pos.access') ? 'pos.access' : 'reports.view');
 
 $title = 'Recommendation System';
 $feature = getAiRecommendationSystemData($pdo);
@@ -20,6 +20,7 @@ $feature = getAiRecommendationSystemData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('pos.php', 'Back to POS'); ?>
             <h1 class="page-title">Recommendation System Feature</h1>
             <p class="page-subtitle">Suggest menu pairings from completed-order co-occurrence patterns to support upselling at the POS.</p>
         </div>

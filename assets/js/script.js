@@ -3,7 +3,11 @@
 let cart = [];
 
 function formatCurrency(value) {
-    return Number(value || 0).toFixed(2);
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) {
+        return '0.00';
+    }
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatOptionLabel(value) {
@@ -45,14 +49,13 @@ function getPosItemById(itemId) {
 
 function showPosMessage(message, type = 'info') {
     const container = document.getElementById('posMessage');
-    if (!container) {
-        if (type === 'danger') {
-            window.KinAlertModal.alert(message, 'Notice', 'OK');
-        }
-        return;
+    if (container) {
+        container.innerHTML = `<div class="alert alert-${type} mb-3">${escapeHtml(message)}</div>`;
     }
-
-    container.innerHTML = `<div class="alert alert-${type} mb-3">${escapeHtml(message)}</div>`;
+    if ((type === 'danger' || type === 'warning') && window.KinAlertModal) {
+        const title = type === 'danger' ? 'Cannot continue' : 'Check this first';
+        window.KinAlertModal.alert(String(message || 'Please review this action.'), title, 'OK');
+    }
 }
 
 function clearPosMessage() {
@@ -169,7 +172,13 @@ function addToCart(itemId, name, price, variant = 'normal', temperature = null, 
     updateCartDisplay();
 }
 
-function removeFromCart(itemKey) {
+async function removeFromCart(itemKey) {
+    const ok = window.KinAlertModal
+        ? await window.KinAlertModal.confirm('Remove this item from the cart?', 'Remove item', 'Remove', 'Keep')
+        : window.confirm('Remove this item from the cart?');
+    if (!ok) {
+        return;
+    }
     cart = cart.filter((item) => `${item.id}_${item.key}` !== itemKey);
     updateCartDisplay();
 }
@@ -246,14 +255,17 @@ function updateCartDisplay() {
         `;
     });
 
+    const summary = getCartSummary();
     const completeButton = document.querySelector('.pos-complete-btn');
     if (completeButton) {
-        completeButton.disabled = cartHasUnavailableItems;
+        const cartReady = cart.length > 0 && !cartHasUnavailableItems;
+        completeButton.disabled = !cartReady;
+        completeButton.classList.toggle('is-ready', cartReady);
     }
 
-    const summary = getCartSummary();
     const subtotalEl = document.getElementById('cart-subtotal');
     const discountEl = document.getElementById('cart-discount');
+    const discountRow = document.getElementById('cart-discount-row');
     const taxEl = document.getElementById('cart-tax');
     const totalEl = document.getElementById('cart-total');
     const paidEl = document.getElementById('cart-paid');
@@ -261,6 +273,7 @@ function updateCartDisplay() {
 
     if (subtotalEl) subtotalEl.textContent = formatCurrency(summary.subtotal);
     if (discountEl) discountEl.textContent = formatCurrency(summary.discount);
+    if (discountRow) discountRow.hidden = !(summary.discount > 0);
     if (taxEl) taxEl.textContent = formatCurrency(summary.tax);
     if (totalEl) totalEl.textContent = formatCurrency(summary.total);
     if (paidEl) paidEl.textContent = formatCurrency(summary.paid);
@@ -482,11 +495,12 @@ function buildCheckoutPayload() {
 
 function completeCheckout() {
     if (cart.length === 0) {
-        showPosMessage('Cart is empty.', 'warning');
+        showPosMessage('Cart is empty. Add items before saving the order.', 'warning');
         return;
     }
 
     const payload = buildCheckoutPayload();
+    const summary = getCartSummary();
     if (payload.is_pwd_senior && !payload.pwd_senior_id) {
         showPosMessage('Please enter the PWD / Senior Citizen ID number before completing checkout.', 'warning');
         const pwdInput = document.getElementById('pwdSeniorId');
@@ -497,7 +511,17 @@ function completeCheckout() {
     }
 
     if (!payload.payments.length) {
-        showPosMessage('Enter a cash amount before checkout.', 'warning');
+        showPosMessage('Enter the cash amount received before saving the order.', 'warning');
+        return;
+    }
+
+    if (summary.paid + 0.001 < summary.total) {
+        showPosMessage(
+            'Insufficient payment. Total is ₱' + formatCurrency(summary.total)
+            + ' but payment is ₱' + formatCurrency(summary.paid)
+            + '. Discount is ₱' + formatCurrency(summary.discount) + '.',
+            'warning'
+        );
         return;
     }
 

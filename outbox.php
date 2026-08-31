@@ -52,7 +52,7 @@ include 'includes/header.php';
             <p class="page-subtitle">View and inspect all emails delivered by the system in real time.</p>
         </div>
         <div class="analytics-hero-actions">
-            <a class="btn btn-outline-secondary" href="user_settings.php?tab=general">SMTP Settings</a>
+            <a class="btn btn-outline-secondary" href="user_settings.php?panel=general">SMTP Settings</a>
             <a class="btn btn-outline-primary" href="outbox.php">Refresh Inbox</a>
         </div>
     </div>
@@ -115,7 +115,7 @@ include 'includes/header.php';
                 <h4 class="text-muted">No emails in outbox</h4>
                 <p class="text-muted">Emails sent by Kin Cafe (password resets, notifications, test emails) will appear here.</p>
                 <div>
-                    <a href="user_settings.php?tab=general" class="btn btn-primary">Send Test Email</a>
+                    <a href="user_settings.php?panel=general" class="btn btn-primary">Send Test Email</a>
                 </div>
             </div>
         <?php endif; ?>

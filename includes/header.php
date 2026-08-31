@@ -107,14 +107,19 @@
 (() => {
     const key = 'kc_tab_id';
     const params = new URLSearchParams(window.location.search);
+    const isSessionTab = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '')) || String(value || '') === 'default' || /^[0-9a-f]{20,}$/i.test(String(value || ''));
     let tab = params.get('tab');
-    if (!tab) {
+    if (!tab || !isSessionTab(tab)) {
+        const panel = tab && !isSessionTab(tab) ? tab : '';
         tab = sessionStorage.getItem(key);
-        if (!tab) {
+        if (!tab || !isSessionTab(tab)) {
             tab = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(16).slice(2) + Date.now().toString(16));
-            sessionStorage.setItem(key, tab);
         }
+        sessionStorage.setItem(key, tab);
         params.set('tab', tab);
+        if (panel && !params.get('panel')) {
+            params.set('panel', panel);
+        }
         const newUrl = window.location.pathname + '?' + params.toString() + window.location.hash;
         window.location.replace(newUrl);
         return;
@@ -127,9 +132,18 @@
             if (!href || href.startsWith('#') || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
             if (!href.includes('.php')) return;
             const url = new URL(href, window.location.origin + window.location.pathname.replace(/[^/]+$/, ''));
-            if (!url.searchParams.get('tab')) {
+            const existingTab = url.searchParams.get('tab');
+            if (existingTab && !isSessionTab(existingTab)) {
+                if (!url.searchParams.get('panel')) {
+                    url.searchParams.set('panel', existingTab);
+                }
                 url.searchParams.set('tab', tab);
-                a.setAttribute('href', url.pathname + '?' + url.searchParams.toString());
+                a.setAttribute('href', url.pathname + '?' + url.searchParams.toString() + url.hash);
+                return;
+            }
+            if (!existingTab) {
+                url.searchParams.set('tab', tab);
+                a.setAttribute('href', url.pathname + '?' + url.searchParams.toString() + url.hash);
             }
         });
 
@@ -242,7 +256,7 @@ $kcNotifItems = $kcNotifFeed['items'] ?? [];
                             <div class="kc-notif-empty">You're all caught up.</div>
                         <?php else: ?>
                             <?php foreach ($kcNotifItems as $n): ?>
-                                <article class="kc-notif-item is-<?php echo htmlspecialchars((string) ($n['severity'] ?? 'info')); ?>" data-key="<?php echo htmlspecialchars((string) ($n['key'] ?? '')); ?>">
+                                <article class="kc-notif-item is-<?php echo htmlspecialchars((string) ($n['severity'] ?? 'info')); ?>" data-key="<?php echo htmlspecialchars((string) ($n['key'] ?? '')); ?>" data-title="<?php echo htmlspecialchars((string) ($n['title'] ?? 'Notification')); ?>" data-details="<?php echo htmlspecialchars((string) ($n['details'] ?? $n['preview'] ?? '')); ?>" data-href="<?php echo htmlspecialchars((string) ($n['href'] ?? '')); ?>">
                                     <a class="kc-notif-link" href="<?php echo htmlspecialchars((string) ($n['href'] ?? '#')); ?>">
                                         <span class="kc-notif-kind"><?php echo htmlspecialchars((string) ($n['meta'] ?? 'Alert')); ?></span>
                                         <strong><?php echo htmlspecialchars((string) ($n['title'] ?? 'Alert')); ?></strong>
@@ -314,30 +328,52 @@ $kcNotifItems = $kcNotifFeed['items'] ?? [];
                 if (e.key === 'Escape') closePanel();
             });
 
-            root.addEventListener('click', function (e) {
-                const btn = e.target.closest('[data-dismiss-key]');
-                if (!btn) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const key = btn.getAttribute('data-dismiss-key') || '';
-                if (!key) return;
+            function dismissKey(key, item) {
+                if (!key) return Promise.resolve();
                 const body = new URLSearchParams();
                 body.set('action', 'dismiss');
                 body.set('notification_key', key);
                 body.set('csrf_token', csrf);
-                fetch('notifications_action.php', {
+                return fetch('notifications_action.php', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
                     body: body.toString()
                 }).then(function (res) { return res.json(); }).then(function (data) {
-                    const item = btn.closest('.kc-notif-item');
                     if (item) item.remove();
                     syncCount(data && typeof data.count === 'number' ? data.count : currentCount());
                 }).catch(function () {
-                    const item = btn.closest('.kc-notif-item');
                     if (item) item.remove();
                     syncCount(currentCount());
+                });
+            }
+
+            root.addEventListener('click', function (e) {
+                const btn = e.target.closest('[data-dismiss-key]');
+                if (btn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dismissKey(btn.getAttribute('data-dismiss-key') || '', btn.closest('.kc-notif-item'));
+                    return;
+                }
+                const link = e.target.closest('.kc-notif-link');
+                if (!link) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const item = link.closest('.kc-notif-item');
+                const title = item ? (item.getAttribute('data-title') || 'Notification') : 'Notification';
+                const details = item ? (item.getAttribute('data-details') || link.textContent || '') : '';
+                const href = item ? (item.getAttribute('data-href') || '') : '';
+                const key = item ? (item.getAttribute('data-key') || '') : '';
+                const showDetails = window.KinAlertModal
+                    ? window.KinAlertModal.alert(details, title, href ? 'Open' : 'OK')
+                    : Promise.resolve(true);
+                showDetails.then(function (ok) {
+                    return dismissKey(key, item).then(function () { return ok; });
+                }).then(function (ok) {
+                    if (ok && href && href !== '#') {
+                        window.location.href = href;
+                    }
                 });
             });
         })();

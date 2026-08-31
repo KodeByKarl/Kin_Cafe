@@ -135,6 +135,7 @@ $initialAnalyticsPayload = [
 <div class="main-content analytics-admin-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('dashboard.php', 'Back to Dashboard'); ?>
             <h1 class="page-title">Data Analytics</h1>
             <p class="page-subtitle">Live sales reporting and business intelligence.</p>
         </div>
@@ -185,6 +186,7 @@ $initialAnalyticsPayload = [
                 <li class="nav-item"><button type="button" class="nav-link" data-analytics-tab="customer-preferences" role="tab" aria-selected="false">Customer Preferences</button></li>
                 <li class="nav-item"><button type="button" class="nav-link" data-analytics-tab="anomaly-detection" role="tab" aria-selected="false">Anomaly Detection</button></li>
             </ul>
+            <button type="button" class="btn btn-sm btn-outline-secondary kc-inventory-tab-back" id="analyticsTabBack" hidden>Back to Overview</button>
         </div>
     </div>
 
@@ -584,20 +586,30 @@ function loadSalesReport() {
 function initAnalyticsFeatureTabs() {
     const tabButtons = document.querySelectorAll('[data-analytics-tab]');
     const panels = document.querySelectorAll('[data-analytics-panel]');
+    const back = document.getElementById('analyticsTabBack');
+    function activate(target, button) {
+        tabButtons.forEach((item) => {
+            const isActive = item.getAttribute('data-analytics-tab') === target;
+            item.classList.toggle('active', isActive);
+            item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        panels.forEach((panel) => {
+            const isActive = panel.getAttribute('data-analytics-panel') === target;
+            panel.classList.toggle('active', isActive);
+            panel.hidden = !isActive;
+        });
+        if (back) {
+            back.hidden = target === 'overview';
+        }
+    }
     tabButtons.forEach((button) => {
         button.addEventListener('click', () => {
-            const target = button.getAttribute('data-analytics-tab');
-            tabButtons.forEach((item) => {
-                item.classList.toggle('active', item === button);
-                item.setAttribute('aria-selected', item === button ? 'true' : 'false');
-            });
-            panels.forEach((panel) => {
-                const isActive = panel.getAttribute('data-analytics-panel') === target;
-                panel.classList.toggle('active', isActive);
-                panel.hidden = !isActive;
-            });
+            activate(button.getAttribute('data-analytics-tab'), button);
         });
     });
+    if (back) {
+        back.addEventListener('click', () => activate('overview'));
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function () {

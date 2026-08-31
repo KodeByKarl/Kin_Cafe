@@ -1273,3 +1273,92 @@ body.pos-assistant-open {
         width: 100vw;
     }
 }
+
+.pos-modern-bills-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pos-cart-toggle {
+    margin-left: auto;
+    border: 1px solid #decebd;
+    background: #fff;
+    color: #6f513d;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.pos-container.pos-cart-collapsed {
+    grid-template-columns: minmax(0, 1fr) 56px;
+}
+
+.pos-container.pos-cart-collapsed .pos-modern-right {
+    overflow: hidden;
+}
+
+.pos-container.pos-cart-collapsed .pos-modern-body,
+.pos-container.pos-cart-collapsed .pos-order-footer,
+.pos-container.pos-cart-collapsed .pos-clear-btn,
+.pos-container.pos-cart-collapsed .pos-modern-bills-title span:last-child {
+    display: none;
+}
+
+.pos-container.pos-cart-collapsed .pos-cart-toggle {
+    writing-mode: vertical-rl;
+    margin: 12px auto;
+    padding: 12px 8px;
+}
+
+.pos-recommendations-panel {
+    border: 1px solid #e4d5c6;
+    border-radius: 14px;
+    background: #fffdfa;
+    margin: 0 0 14px;
+}
+
+.pos-recommendations-panel > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.pos-recommendations-panel > summary::-webkit-details-marker {
+    display: none;
+}
+
+.pos-recommendations-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+}
+
+.pos-recommendations-link {
+    border: 0;
+    background: transparent;
+    color: #0f766e;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    padding: 0;
+}
+
+.pos-complete-btn {
+    opacity: 0.55;
+}
+
+.pos-complete-btn.is-ready {
+    opacity: 1;
+    background: #2d6a4f !important;
+}
+
+.pos-complete-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+}

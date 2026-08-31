@@ -262,6 +262,7 @@ textarea:focus {
 .kc-alert-body {
     padding: 14px 16px;
     color: var(--text);
+    white-space: pre-wrap;
 }
 
 .kc-alert-footer {

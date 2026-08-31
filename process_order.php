@@ -342,7 +342,11 @@ try {
     ];
 
     if ($paidAmount + 0.001 < $totalAmount) {
-        throw new InvalidArgumentException('Insufficient payment. Additional funds are required to complete the transaction.');
+        throw new InvalidArgumentException(
+            'Insufficient payment. Total is ₱' . number_format($totalAmount, 2)
+            . ' but payment is ₱' . number_format($paidAmount, 2)
+            . '. Discount applied: ₱' . number_format($discountAmount, 2) . '.'
+        );
     }
 
     $changeAmount = round(max($paidAmount - $totalAmount, 0), 2);

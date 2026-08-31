@@ -34,7 +34,13 @@ function aiFormatHourLabel(?int $hour): string {
         return 'No peak hour yet';
     }
 
-    return sprintf('%02d:00-%02d:00', $hour, ($hour + 1) % 24);
+    $start = DateTime::createFromFormat('G', (string) $hour);
+    if (!$start) {
+        return sprintf('%02d:00-%02d:00', $hour, ($hour + 1) % 24);
+    }
+    $end = clone $start;
+    $end->modify('+1 hour');
+    return $start->format('g:00 A') . ' – ' . $end->format('g:00 A');
 }
 
 function aiRuleBasedMethodLabel(string $context = 'analytics'): string {

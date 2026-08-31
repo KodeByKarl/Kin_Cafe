@@ -91,7 +91,7 @@ $feature = getAiSalesForecastingData($pdo);
                 <?php endif; ?>
             </ul>
             <div class="ai-module-link-row">
-                <a class="btn btn-outline-secondary" href="inventory.php?tab=smart-reordering">Open Smart Reordering</a>
+                <a class="btn btn-outline-secondary" href="inventory.php?panel=reordering">Open Smart Reordering</a>
                 <a class="btn btn-outline-secondary" href="ai_demand_prediction.php">Open Demand Prediction</a>
             </div>
         </div>

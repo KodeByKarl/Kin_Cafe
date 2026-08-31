@@ -157,17 +157,17 @@ if ($ping['code'] === 0) {
     check('Admin Settings still has Notifications tab', str_contains($settings['body'], 'data-tab="notifications"'));
 
     $hist = $q('user_settings.php?view=history');
-    $settingsJsHasHistory = str_contains($settings['body'], 'data-panel="history"') && str_contains($settings['body'], 'Menu &amp; Stock Activity');
+    $settingsJsHasHistory = str_contains($settings['body'], 'data-panel="history"') && str_contains($settings['body'], 'Activity History');
     check('Activity History panel loads', $settingsJsHasHistory || (str_contains($hist['body'], 'Staff') && str_contains($hist['body'], 'Activity')));
 
     $inv = $q('inventory.php');
     $cssFile = (string) file_get_contents($root . '/assets/css/ui-modern.css');
     check('Low-stock blink CSS is loaded', str_contains($inv['body'], 'ui-modern.css') || str_contains($inv['body'], 'is-low-stock'), $debug('inv', $inv));
     check('Low-stock blink keyframes exist', str_contains($cssFile, '@keyframes kc-low-stock-blink'));
-    check('Expiring pill has no blink class in CSS pairing', str_contains($cssFile, '.inventory-status-pill.is-expiring') && !preg_match('/\.inventory-status-pill\.is-expiring\s*\{[^}]*kc-low-stock-blink/s', $cssFile));
+    check('Expiring and expired stock blink for monitors', str_contains($cssFile, '@keyframes kc-expiry-blink') && str_contains($cssFile, '@keyframes kc-expired-blink'));
 
     $menu = $q('menu_management.php');
-    check('Recipe row spacing CSS exists', str_contains($cssFile, '.recipe-row') && str_contains($cssFile, 'padding: 14px'));
+    check('Recipe row spacing CSS exists', str_contains($cssFile, '.recipe-row') && str_contains($cssFile, 'padding: 20px'));
     check('Menu page loads for admin', $menu['code'] === 200, $debug('menu', $menu));
 
     $pos = $q('pos.php');

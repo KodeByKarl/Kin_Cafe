@@ -607,6 +607,7 @@ $availableItemCount = count(array_filter($items, static function ($item) {
 <div class="main-content menu-admin-page">
     <div class="page-hero menu-admin-hero">
         <div>
+            <?php renderPageBackButton('dashboard.php', 'Back to Dashboard'); ?>
             <h1 class="page-title">Menu Management</h1>
             <p class="page-subtitle">Configure your cafe's offerings and pricing.</p>
         </div>
@@ -642,13 +643,13 @@ $menuUnavailableCount = count(array_filter($items, static function ($item) {
     <div class="alert alert-warning" role="status">
         <strong><?php echo (int) $menuUnavailableCount; ?> menu item<?php echo $menuUnavailableCount === 1 ? '' : 's'; ?> currently unavailable.</strong>
         Reasons are shown under each item (manual disable, expired ingredients, or insufficient stock) so staff can restock or fix recipes immediately.
-        <a class="alert-link" href="inventory.php?tab=reordering&filter=low">Open low-stock inventory</a>
+        <a class="alert-link" href="inventory.php?panel=reordering&filter=low">Open low-stock inventory</a>
     </div>
 <?php endif; ?>
 
 <div class="menu-admin-toolbar">
     <div class="menu-admin-search-wrap">
-        <input type="text" id="searchInput" class="form-control" placeholder="Search menu items...">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search menu items..." data-live-search-target="#categoryList .menu-item-card" data-live-search-filter="off" autocomplete="off">
     </div>
     <div class="menu-admin-filter-pills" id="menuCategoryFilters">
         <button type="button" class="active" onclick="filterMenuSections('all', this)">All</button>
@@ -664,11 +665,10 @@ $menuUnavailableCount = count(array_filter($items, static function ($item) {
     <span><?php echo (int) count($categories); ?> categories</span>
 </div>
 
-<div class="card mb-4" id="menuEditHistory">
-    <div class="dashboard-card-head">
-        <h2>Menu &amp; Stock Edit History</h2>
-    </div>
-    <div class="card-body table-responsive">
+<div class="card mb-4 kc-history-disclosure-card" id="menuEditHistory">
+    <details class="kc-history-disclosure">
+        <summary>Menu &amp; Stock Edit History</summary>
+        <div class="card-body table-responsive">
         <?php if (empty($menuEditHistory)): ?>
             <p class="text-muted mb-0">No menu or stock edits logged yet. Changes will appear here after staff update menu items or reduce/add ingredient stock.</p>
         <?php else: ?>
@@ -694,6 +694,7 @@ $menuUnavailableCount = count(array_filter($items, static function ($item) {
             </table>
         <?php endif; ?>
     </div>
+    </details>
 </div>
 
 <!-- Manage Categories Modal with Tabs -->
