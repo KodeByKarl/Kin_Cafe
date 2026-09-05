@@ -274,11 +274,16 @@ try {
 
     $isPwdSenior = !empty($payload['is_pwd_senior']);
     $pwdSeniorId = trim((string) ($payload['pwd_senior_id'] ?? ''));
+    $isStoreDiscount = !empty($payload['is_store_discount']);
 
     $promotion = null;
     $discountAmount = 0.0;
     $discountType = null;
     $taxAmount = 0.0;
+
+    if ($isPwdSenior && $isStoreDiscount) {
+        throw new InvalidArgumentException('Choose either Store Discount (10%) or PWD/Senior Discount, not both.');
+    }
 
     if ($isPwdSenior) {
         if ($pwdSeniorId === '') {
@@ -289,6 +294,12 @@ try {
         $discountAmount = round($vatExclusiveSubtotal * 0.20, 2);
         $taxAmount = 0.00;
         $totalAmount = round(max($vatExclusiveSubtotal - $discountAmount, 0), 2);
+    } elseif ($isStoreDiscount) {
+        $discountType = 'store';
+        $discountAmount = round((float) $subtotal * 0.10, 2);
+        $discountAmount = round(min(max($discountAmount, 0), (float) $subtotal), 2);
+        $totalAmount = round(max((float) $subtotal - $discountAmount, 0), 2);
+        $taxAmount = 0.00;
     } elseif ($promoCode !== '') {
         $promotion = getActivePromotion($pdo, $promoCode, (float) $subtotal);
         if (!$promotion) {
@@ -302,10 +313,10 @@ try {
         }
         $discountAmount = round(min(max($discountAmount, 0), (float) $subtotal), 2);
         $totalAmount = round(max((float) $subtotal - $discountAmount, 0), 2);
-        $taxAmount = round($totalAmount * 0.12, 2);
+        $taxAmount = 0.00;
     } else {
         $totalAmount = round((float) $subtotal, 2);
-        $taxAmount = round($totalAmount * 0.12, 2);
+        $taxAmount = 0.00;
     }
 
     if ($totalAmount < 0) {

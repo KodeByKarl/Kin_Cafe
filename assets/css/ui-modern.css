@@ -932,9 +932,6 @@ select.form-control:focus {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .analytics-forecast-banner strong {
@@ -3803,20 +3800,34 @@ body.user_settings .main-content {
     align-items: center;
     gap: 6px;
     margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+    background: none;
     color: #6f513d;
     font-weight: 700;
     font-size: 0.92rem;
+    line-height: 1.2;
+    font-family: inherit;
     text-decoration: none;
+    cursor: pointer;
 }
 
 .kc-page-back svg {
     width: 16px;
     height: 16px;
+    flex: 0 0 16px;
 }
 
-.kc-page-back:hover {
+.kc-page-back:hover,
+.kc-page-back:focus {
     color: #3f2b20;
     text-decoration: none;
+    outline: none;
+}
+
+.kc-page-back[hidden],
+.kc-inventory-tab-back[hidden] {
+    display: none !important;
 }
 
 .kc-history-disclosure {
@@ -3838,8 +3849,22 @@ body.user_settings .main-content {
     display: none;
 }
 
+.inventory-tabs-card .card-body,
+.analytics-feature-tabs-card .card-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.inventory-feature-tabs,
+.analytics-feature-tabs {
+    width: 100%;
+    margin-bottom: 0;
+}
+
 .kc-inventory-tab-back {
-    margin: 0 0 12px;
+    margin: 10px 0 0;
+    align-self: flex-start;
 }
 
 @keyframes kc-expiry-blink {

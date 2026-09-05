@@ -20,6 +20,7 @@ $feature = getAiDemandPredictionData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('analytics.php', 'Back to Analytics'); ?>
             <h1 class="page-title">Demand Prediction Feature</h1>
             <p class="page-subtitle">Predict demand for specific menu items using historical data, time patterns, and recent customer behavior.</p>
         </div>

@@ -113,20 +113,35 @@ function getCartSummary() {
     
     const isPwdSeniorEl = document.getElementById('isPwdSenior');
     const isPwdSenior = isPwdSeniorEl ? isPwdSeniorEl.checked : false;
+    const isStoreDiscountEl = document.getElementById('isStoreDiscount');
+    const isStoreDiscount = isStoreDiscountEl ? isStoreDiscountEl.checked : false;
 
     let discount = 0;
     let total = subtotal;
     let promotionObj = null;
+    let discountType = null;
+    let discountLabel = 'Discount';
 
     if (isPwdSenior && subtotal > 0) {
         const vatExclusive = round(subtotal / 1.12);
         discount = round(vatExclusive * 0.20);
         total = round(Math.max(vatExclusive - discount, 0));
+        discountType = 'pwd_senior';
+        discountLabel = 'PWD/Senior (20% Off)';
+    } else if (isStoreDiscount && subtotal > 0) {
+        discount = round(subtotal * 0.10);
+        total = round(Math.max(subtotal - discount, 0));
+        discountType = 'store';
+        discountLabel = 'Store Discount (10% Off)';
     } else {
         const promotion = getEstimatedPromotion(subtotal);
         discount = promotion.discountAmount;
         total = Math.max(subtotal - discount, 0);
         promotionObj = promotion.promotion;
+        if (discount > 0) {
+            discountType = 'promo';
+            discountLabel = 'Promo Code Discount';
+        }
     }
 
     const payments = getPaymentEntries();
@@ -137,12 +152,15 @@ function getCartSummary() {
     return {
         subtotal: round(subtotal),
         discount: round(discount),
+        discountType,
+        discountLabel,
         tax: 0,
         total: round(total),
         paid,
         change,
         promotion: promotionObj,
-        isPwdSenior
+        isPwdSenior,
+        isStoreDiscount
     };
 }
 
@@ -273,6 +291,8 @@ function updateCartDisplay() {
 
     if (subtotalEl) subtotalEl.textContent = formatCurrency(summary.subtotal);
     if (discountEl) discountEl.textContent = formatCurrency(summary.discount);
+    const discountLabelEl = document.getElementById('cart-discount-label');
+    if (discountLabelEl) discountLabelEl.textContent = summary.discountLabel || 'Discount';
     if (discountRow) discountRow.hidden = !(summary.discount > 0);
     if (taxEl) taxEl.textContent = formatCurrency(summary.tax);
     if (totalEl) totalEl.textContent = formatCurrency(summary.total);
@@ -469,6 +489,7 @@ function initMenuSearch() {
 function buildCheckoutPayload() {
     const isPwdSeniorEl = document.getElementById('isPwdSenior');
     const pwdSeniorIdEl = document.getElementById('pwdSeniorId');
+    const isStoreDiscountEl = document.getElementById('isStoreDiscount');
     return {
         cart: cart.map((item) => ({
             id: item.id,
@@ -484,6 +505,7 @@ function buildCheckoutPayload() {
         promoCode: document.getElementById('promoCode') ? document.getElementById('promoCode').value.trim() : '',
         is_pwd_senior: isPwdSeniorEl ? isPwdSeniorEl.checked : false,
         pwd_senior_id: pwdSeniorIdEl ? pwdSeniorIdEl.value.trim() : '',
+        is_store_discount: isStoreDiscountEl ? isStoreDiscountEl.checked : false,
         notes: document.getElementById('orderNotes') ? document.getElementById('orderNotes').value.trim() : '',
         customer: {
             name: document.getElementById('customerName') ? document.getElementById('customerName').value.trim() : '',
@@ -586,6 +608,8 @@ function renderReceipt(receipt) {
     let discountLabel = 'Discount';
     if (receipt.discount_type === 'pwd_senior') {
         discountLabel = `PWD/Senior (20% Off${receipt.pwd_senior_id ? `, ID: ${escapeHtml(receipt.pwd_senior_id)}` : ''})`;
+    } else if (receipt.discount_type === 'store') {
+        discountLabel = 'Store Discount (10% Off)';
     } else if (receipt.discount_type === 'promo') {
         discountLabel = 'Promo Code Discount';
     }
@@ -676,6 +700,10 @@ function clearCheckoutForm(resetMessage = true) {
     const isPwdSeniorEl = document.getElementById('isPwdSenior');
     if (isPwdSeniorEl) {
         isPwdSeniorEl.checked = false;
+    }
+    const isStoreDiscountEl = document.getElementById('isStoreDiscount');
+    if (isStoreDiscountEl) {
+        isStoreDiscountEl.checked = false;
     }
     if (typeof togglePwdSeniorInput === 'function') {
         togglePwdSeniorInput();

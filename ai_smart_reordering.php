@@ -20,6 +20,7 @@ $feature = getAiSmartReorderingData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('inventory.php?panel=reordering', 'Back to Inventory'); ?>
             <h1 class="page-title">Smart Reordering Feature</h1>
             <p class="page-subtitle">Generate reorder guidance when ingredient stock drops below consumption-based reorder points.</p>
         </div>

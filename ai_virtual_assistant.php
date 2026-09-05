@@ -327,6 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') =
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('pos.php', 'Back to POS'); ?>
             <h1 class="page-title">Virtual Assistant Feature</h1>
             <p class="page-subtitle">A dedicated assistant surface for inquiries, menu help, operational answers, and order guidance.</p>
         </div>

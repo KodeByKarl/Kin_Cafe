@@ -155,7 +155,10 @@ $pos = $q('pos.php');
 check('POS hide-cart button', str_contains($pos['body'], 'id="posCartToggle"'));
 check('POS add-ons are collapsible details', str_contains($pos['body'], '<details class="pos-recommendations-panel"'));
 check('POS View all is in-page button', str_contains($pos['body'], 'id="posRecommendationsViewAll"'));
+check('POS add-ons overlay uses page back', str_contains($pos['body'], 'id="posRecommendationsOverlay"') && str_contains($pos['body'], 'id="posRecommendationsBack"'));
 check('POS discount row exists', str_contains($pos['body'], 'id="cart-discount-row"'));
+check('POS store discount checkbox exists', str_contains($pos['body'], 'id="isStoreDiscount"') && str_contains($pos['body'], 'Store Discount (10% Off)'));
+check('POS PWD discount checkbox exists', str_contains($pos['body'], 'id="isPwdSenior"'));
 check('POS save button present', str_contains($pos['body'], 'pos-complete-btn'));
 check('POS live-search/password scripts loaded', str_contains($pos['body'], 'live-search.js') && str_contains($pos['body'], 'password-toggle.js') && str_contains($pos['body'], 'alert-modal.js'));
 
@@ -167,6 +170,9 @@ check('Inventory reordering panel keeps session', $invPanel['code'] === 200 && s
 check('Inventory expiry blink classes exist', str_contains($inv['body'], 'is-expiring-stock') || str_contains($inv['body'], 'is-expired-stock') || str_contains($inv['body'], 'is-low-stock'));
 check('Inventory live search marker', str_contains($inv['body'], 'data-live-search-target'));
 check('Inventory back button', str_contains($inv['body'], 'kc-page-back') && str_contains($inv['body'], 'inventoryTabBack'));
+
+$analytics = $q('analytics.php');
+check('Analytics back button', str_contains($analytics['body'], 'kc-page-back') && str_contains($analytics['body'], 'analyticsTabBack'));
 
 $menu = $q('menu_management.php');
 check('Menu history is a dropdown', str_contains($menu['body'], 'kc-history-disclosure') && str_contains($menu['body'], '<details'));

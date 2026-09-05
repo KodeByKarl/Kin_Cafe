@@ -29,10 +29,20 @@ function getBackupDirectory(): string {
     return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
 }
 
+function pageBackChevronSvg(): string {
+    return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5.5 8.5 12 15 18.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
 function renderPageBackButton(string $href = 'dashboard.php', string $label = 'Back'): void {
     echo '<a class="kc-page-back" href="' . htmlspecialchars($href) . '">'
-        . '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5.5 8.5 12 15 18.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        . pageBackChevronSvg()
         . '<span>' . htmlspecialchars($label) . '</span></a>';
+}
+
+function renderTabBackButton(string $id, string $label): void {
+    echo '<button type="button" class="kc-page-back kc-inventory-tab-back" id="' . htmlspecialchars($id) . '" hidden>'
+        . pageBackChevronSvg()
+        . '<span>' . htmlspecialchars($label) . '</span></button>';
 }
 
 function syncAutomatedStockCeilings(PDO $pdo): void {

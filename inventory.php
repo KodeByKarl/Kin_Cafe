@@ -502,7 +502,7 @@ function formatStockQuantity($quantity) {
                 <li class="nav-item"><button type="button" class="nav-link" data-inventory-tab="reordering" role="tab" aria-selected="false">Smart Reordering</button></li>
                 <li class="nav-item"><button type="button" class="nav-link" data-inventory-tab="waste" role="tab" aria-selected="false">Waste Reduction</button></li>
             </ul>
-            <button type="button" class="btn btn-sm btn-outline-secondary kc-inventory-tab-back" id="inventoryTabBack" hidden>Back to Stock</button>
+            <?php renderTabBackButton('inventoryTabBack', 'Back to Stock'); ?>
         </div>
     </div>
 

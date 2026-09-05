@@ -77,6 +77,40 @@ body.pos .sidebar-item.logout {
 
 .pos-modern-left {
     min-width: 0;
+    position: relative;
+}
+
+.pos-recommendations-overlay[hidden] {
+    display: none !important;
+}
+
+.pos-modern-left.is-showing-recommendations > :not(#posRecommendationsOverlay) {
+    display: none;
+}
+
+.pos-recommendations-overlay-title {
+    margin: 0 0 6px;
+    color: #3f2b20;
+    font-size: clamp(1.6rem, 2.4vw, 2.2rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.pos-recommendations-overlay-copy {
+    margin: 0 0 18px;
+    color: #6f513d;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.pos-recommendations-overlay-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+}
+
+.pos-recommendations-overlay-list .pos-recommendation-card {
+    min-height: 74px;
 }
 
 .pos-catalog-toolbar {

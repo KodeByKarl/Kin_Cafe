@@ -20,6 +20,7 @@ $feature = getAiCustomerPreferencesData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('analytics.php', 'Back to Analytics'); ?>
             <h1 class="page-title">Customer Preference Analysis Feature</h1>
             <p class="page-subtitle">Analyze customer purchase history to identify buying patterns and preferred menu categories.</p>
         </div>

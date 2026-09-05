@@ -157,12 +157,6 @@ $initialAnalyticsPayload = [
                 </div>
                 <span class="forecast-model-label" id="analyticsForecastMethodLabel"><?php echo htmlspecialchars((string) ($salesForecast['method_label'] ?? '')); ?></span>
             </div>
-            <div class="ai-module-utility-links">
-                <a class="btn btn-outline-secondary ai-shortcut-btn" href="ai_sales_forecasting.php"><span class="ai-shortcut-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 16 9 11l3 3 8-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6h6v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Sales Forecasting</span></a>
-                <a class="btn btn-outline-secondary ai-shortcut-btn" href="ai_demand_prediction.php"><span class="ai-shortcut-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7.5" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 4.5v2.2M19.5 12h-2.2M12 19.5v-2.2M4.5 12h2.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Demand Prediction</span></a>
-                <a class="btn btn-outline-secondary ai-shortcut-btn" href="ai_customer_preferences.php"><span class="ai-shortcut-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M16 21v-1.5a3.5 3.5 0 0 0-3.5-3.5h-4A3.5 3.5 0 0 0 5 19.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="8" r="3.5" stroke="currentColor" stroke-width="1.8"/><path d="M18 8h2.5M19.25 6.75v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Customer Preferences</span></a>
-                <a class="btn btn-outline-secondary ai-shortcut-btn" href="ai_anomaly_detection.php"><span class="ai-shortcut-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 3.8 18a1 1 0 0 0 .9 1.5h14.6a1 1 0 0 0 .9-1.5L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1" fill="currentColor"/></svg></span><span>Anomaly Detection</span></a>
-            </div>
         </div>
     </div>
 
@@ -186,7 +180,7 @@ $initialAnalyticsPayload = [
                 <li class="nav-item"><button type="button" class="nav-link" data-analytics-tab="customer-preferences" role="tab" aria-selected="false">Customer Preferences</button></li>
                 <li class="nav-item"><button type="button" class="nav-link" data-analytics-tab="anomaly-detection" role="tab" aria-selected="false">Anomaly Detection</button></li>
             </ul>
-            <button type="button" class="btn btn-sm btn-outline-secondary kc-inventory-tab-back" id="analyticsTabBack" hidden>Back to Overview</button>
+            <?php renderTabBackButton('analyticsTabBack', 'Back to Overview'); ?>
         </div>
     </div>
 

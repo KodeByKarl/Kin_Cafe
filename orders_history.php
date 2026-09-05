@@ -782,7 +782,7 @@ function openOrderDetails(orderId) {
                     <div class="card-header">Totals</div>
                     <div class="card-body">
                         <div class="d-flex justify-content-between"><span>Subtotal</span><strong>₱${fmtMoney(o.subtotal_amount)}</strong></div>
-                        <div class="d-flex justify-content-between"><span>Discount ${o.discount_type === 'pwd_senior' ? `(PWD/Senior 20% Off${o.pwd_senior_id ? `, ID: ${escapeHtml(o.pwd_senior_id)}` : ''})` : ''}</span><strong>₱${fmtMoney(o.discount_amount)}</strong></div>
+                        <div class="d-flex justify-content-between"><span>Discount ${o.discount_type === 'pwd_senior' ? `(PWD/Senior 20% Off${o.pwd_senior_id ? `, ID: ${escapeHtml(o.pwd_senior_id)}` : ''})` : (o.discount_type === 'store' ? '(Store 10% Off)' : (o.discount_type === 'promo' ? '(Promo)' : ''))}</span><strong>₱${fmtMoney(o.discount_amount)}</strong></div>
                         <div class="d-flex justify-content-between"><span>Refund</span><strong>₱${fmtMoney(o.refund_amount)}</strong></div>
                         <hr>
                         <div class="d-flex justify-content-between"><span>Total</span><strong>₱${fmtMoney(o.total_amount)}</strong></div>

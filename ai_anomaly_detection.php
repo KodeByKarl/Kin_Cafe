@@ -20,6 +20,7 @@ $feature = getAiAnomalyDetectionData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('analytics.php', 'Back to Analytics'); ?>
             <h1 class="page-title">Sales and Inventory Anomaly Detection Feature</h1>
             <p class="page-subtitle">Detect irregular sales patterns and inventory movements that may indicate operational issues.</p>
         </div>

@@ -20,6 +20,7 @@ $feature = getAiWasteReductionData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('inventory.php?panel=waste', 'Back to Inventory'); ?>
             <h1 class="page-title">Waste Reduction and Inventory Efficiency Feature</h1>
             <p class="page-subtitle">Analyze expiring stock, slow movers, and waste-related activity to reduce spoilage and improve efficiency.</p>
         </div>

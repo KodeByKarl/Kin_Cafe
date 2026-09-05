@@ -20,6 +20,7 @@ $feature = getAiSalesForecastingData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('analytics.php', 'Back to Analytics'); ?>
             <h1 class="page-title">Sales Forecasting Feature</h1>
             <p class="page-subtitle">Forecast future sales trends from historical completed orders to support inventory planning and resource allocation.</p>
         </div>

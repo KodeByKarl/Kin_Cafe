@@ -1556,7 +1556,7 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
 
     // 8. POS / DISCOUNT / HELP / RECEIPT / CASH / CHECKOUT
     if (preg_match('/(pos|discount|receipt|cash|checkout|pwd|senior|how to|help)/i', $q)) {
-        return "<strong>POS Operational Guide:</strong><br>• <strong>Checkout:</strong> Add items to cart, enter cash amount, click CASH button.<br>• <strong>Discounts:</strong> Check <em>PWD/Senior Discount (20%)</em> or enter a promo code before payment.<br>• <strong>Receipts:</strong> Click <em>Print Receipt</em> on order completion popup.";
+        return "<strong>POS Operational Guide:</strong><br>• <strong>Checkout:</strong> Add items to cart, enter cash amount, click CASH button.<br>• <strong>Discounts:</strong> Use <em>Store Discount (10%)</em> for regular promotions, or check <em>PWD/Senior Discount (20%)</em> with ID for statutory discounts. Only one discount applies per order.<br>• <strong>Receipts:</strong> Click <em>Print Receipt</em> on order completion popup.";
     }
 
     // 9. FALLBACK TOKEN MATCHING AGAINST PROMPT LIBRARY

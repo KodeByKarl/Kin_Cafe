@@ -17,14 +17,14 @@ $users = $pdo->query("SELECT id, username, role FROM users ORDER BY username ASC
 include 'includes/header.php';
 ?>
 
-<div class="main-content">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+<div class="main-content analytics-admin-page">
+    <div class="page-hero analytics-hero">
         <div>
-            <h1>Advanced Analytics</h1>
-            <small class="text-muted">Real-time KPIs, interactive charts, drill-down, and exports.</small>
+            <?php renderPageBackButton('analytics.php', 'Back to Analytics'); ?>
+            <h1 class="page-title">Advanced Analytics</h1>
+            <p class="page-subtitle">Real-time KPIs, interactive charts, drill-down, and exports.</p>
         </div>
-        <div class="btn-group">
-            <a class="btn btn-outline-secondary" href="analytics.php">Back to Analytics</a>
+        <div class="analytics-hero-actions">
             <a class="btn btn-outline-secondary" href="analytics_export.php?type=orders&format=csv">Export Orders (CSV)</a>
             <a class="btn btn-outline-secondary" href="analytics_export.php?type=orders&format=excel">Export Orders (Excel)</a>
             <a class="btn btn-outline-secondary" href="analytics_export.php?type=audit&format=csv">Export Audit (CSV)</a>

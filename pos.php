@@ -136,6 +136,15 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
     <main class="main-content">
         <div class="pos-container pos-modern-layout">
             <section class="pos-modern-left">
+                <div class="pos-recommendations-overlay" id="posRecommendationsOverlay" hidden>
+                    <button type="button" class="kc-page-back" id="posRecommendationsBack">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5.5 8.5 12 15 18.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Back to POS</span>
+                    </button>
+                    <h2 class="pos-recommendations-overlay-title">Recommended add-ons</h2>
+                    <p class="pos-recommendations-overlay-copy">Pairings from completed orders. Tap an item to add it to the current cart.</p>
+                    <div class="pos-recommendations-overlay-list" id="posRecommendationsAllList"></div>
+                </div>
                 <div class="pos-catalog-toolbar">
                     <div class="pos-modern-search">
                         <div class="pos-search-input-row">
@@ -249,6 +258,10 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
                         </div>
 
                         <div class="pos-field-group mb-2 p-2 rounded" style="background:#f8fafc; border:1px solid #cbd5e1;">
+                            <div class="custom-control custom-checkbox mb-2">
+                                <input type="checkbox" id="isStoreDiscount" class="custom-control-input" onchange="toggleStoreDiscount(); updateCartDisplay();">
+                                <label class="custom-control-label font-weight-bold text-dark small" for="isStoreDiscount">Store Discount (10% Off)</label>
+                            </div>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" id="isPwdSenior" class="custom-control-input" onchange="togglePwdSeniorInput(); updateCartDisplay();">
                                 <label class="custom-control-label font-weight-bold text-dark small" for="isPwdSenior">PWD / Senior Citizen Discount (20% Off, VAT-Exempt)</label>
@@ -257,6 +270,7 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
                                 <label class="pos-field-label small" for="pwdSeniorId">PWD / Senior Citizen ID #</label>
                                 <input type="text" id="pwdSeniorId" class="form-control form-control-sm" placeholder="Enter Booklet / ID Number">
                             </div>
+                            <p class="mb-0 mt-2 small text-muted">Store discount is separate from PWD/Senior. Only one discount can apply per order.</p>
                         </div>
 
                         <div class="pos-field-group">
@@ -271,7 +285,7 @@ $posAssistantCsrf = csrfToken('pos_virtual_assistant');
 
                         <div class="pos-order-summary">
                             <div class="pos-order-summary-row"><span>Subtotal</span><strong>₱<span id="cart-subtotal">0.00</span></strong></div>
-                            <div class="pos-order-summary-row" id="cart-discount-row" hidden><span>Discount</span><strong>- ₱<span id="cart-discount">0.00</span></strong></div>
+                            <div class="pos-order-summary-row" id="cart-discount-row" hidden><span id="cart-discount-label">Discount</span><strong>- ₱<span id="cart-discount">0.00</span></strong></div>
                             <div class="pos-order-summary-total"><span>Total</span><strong>₱<span id="cart-total">0.00</span></strong></div>
                             <div class="pos-order-summary-row pos-order-summary-meta"><span>Amount Paid</span><strong>₱<span id="cart-paid">0.00</span></strong></div>
                             <div class="pos-order-summary-row pos-order-summary-meta"><span>Change</span><strong>₱<span id="cart-change">0.00</span></strong></div>
@@ -341,25 +355,35 @@ function updatePosRecommendations() {
 
     if (!suggestions.length) {
         list.innerHTML = '<p class="pos-recommendations-empty">No recommendations available yet. Complete more orders to build pairing history.</p>';
+        refreshPosRecommendationsOverlay();
         return;
     }
 
-    list.innerHTML = suggestions.slice(0, 4).map((entry) => {
-        const item = entry.item;
-        const price = typeof item.price === 'number' ? item.price : Number(item.price || 0);
-        const encodedItem = encodeURIComponent(JSON.stringify(item));
-        return `
-            <button type="button" class="pos-recommendation-card" data-item="${encodedItem}">
-                <span class="pos-recommendation-copy">
-                    <strong>${escapeHtml(item.name || '')}</strong>
-                    <small>${escapeHtml(entry.reason)}</small>
-                </span>
-                <span class="pos-recommendation-price">₱${formatCurrency(price)}</span>
-            </button>
-        `;
-    }).join('');
+    list.innerHTML = suggestions.slice(0, 4).map((entry) => renderPosRecommendationCard(entry)).join('');
+    bindPosRecommendationCards(list);
+    refreshPosRecommendationsOverlay();
+}
 
-    list.querySelectorAll('.pos-recommendation-card').forEach((button) => {
+function renderPosRecommendationCard(entry) {
+    const item = entry.item || {};
+    const price = typeof item.price === 'number' ? item.price : Number(item.price || 0);
+    const encodedItem = encodeURIComponent(JSON.stringify(item));
+    return `
+        <button type="button" class="pos-recommendation-card" data-item="${encodedItem}">
+            <span class="pos-recommendation-copy">
+                <strong>${escapeHtml(item.name || '')}</strong>
+                <small>${escapeHtml(entry.reason || '')}</small>
+            </span>
+            <span class="pos-recommendation-price">₱${formatCurrency(price)}</span>
+        </button>
+    `;
+}
+
+function bindPosRecommendationCards(root) {
+    if (!root) {
+        return;
+    }
+    root.querySelectorAll('.pos-recommendation-card').forEach((button) => {
         button.addEventListener('click', () => {
             if (!button.dataset.item) {
                 return;
@@ -371,6 +395,41 @@ function updatePosRecommendations() {
             }
         });
     });
+}
+
+function collectPosRecommendationEntries(limit) {
+    const config = window.POS_CONFIG && window.POS_CONFIG.recommendations;
+    const cartIds = new Set((cart || []).map((entry) => Number(entry.id)).filter((id) => id > 0));
+    const seen = new Set();
+    const suggestions = [];
+
+    function pushSuggestion(row) {
+        const item = row && row.item ? row.item : null;
+        if (!item || item.available === false) {
+            return;
+        }
+        const itemId = Number(item.id);
+        if (!itemId || cartIds.has(itemId) || seen.has(itemId)) {
+            return;
+        }
+        seen.add(itemId);
+        suggestions.push({
+            item,
+            reason: String(row.reason || 'Suggested for this order'),
+        });
+    }
+
+    if (config && Array.isArray(config.pairs)) {
+        config.pairs.forEach(pushSuggestion);
+    }
+    if (config && Array.isArray(config.popular)) {
+        config.popular.forEach(pushSuggestion);
+    }
+
+    if (typeof limit === 'number' && limit > 0) {
+        return suggestions.slice(0, limit);
+    }
+    return suggestions;
 }
 
 function initPosAssistantPanel() {
@@ -540,57 +599,84 @@ function initPosCartToggle() {
     });
 }
 
-function initPosRecommendationsViewAll() {
-    const button = document.getElementById('posRecommendationsViewAll');
-    if (!button) {
+function refreshPosRecommendationsOverlay() {
+    const overlay = document.getElementById('posRecommendationsOverlay');
+    const allList = document.getElementById('posRecommendationsAllList');
+    if (!overlay || overlay.hidden || !allList) {
         return;
     }
+    const entries = collectPosRecommendationEntries(18);
+    allList.innerHTML = entries.length
+        ? entries.map((entry) => renderPosRecommendationCard(entry)).join('')
+        : '<p class="pos-recommendations-empty">Add items to the cart to see pairing suggestions. Pairings come from completed-order patterns.</p>';
+    bindPosRecommendationCards(allList);
+}
+
+function initPosRecommendationsViewAll() {
+    const button = document.getElementById('posRecommendationsViewAll');
+    const overlay = document.getElementById('posRecommendationsOverlay');
+    const back = document.getElementById('posRecommendationsBack');
+    const catalog = document.querySelector('.pos-modern-left');
+    if (!button || !overlay) {
+        return;
+    }
+
+    function setOpen(isOpen) {
+        overlay.hidden = !isOpen;
+        if (catalog) {
+            catalog.classList.toggle('is-showing-recommendations', isOpen);
+        }
+        if (isOpen) {
+            refreshPosRecommendationsOverlay();
+        }
+    }
+
     button.addEventListener('click', function (event) {
         event.preventDefault();
         event.stopPropagation();
-        const config = window.POS_CONFIG && window.POS_CONFIG.recommendations;
-        const lines = [];
-        function addRow(row) {
-            const item = row && row.item ? row.item : null;
-            const name = item && item.name ? String(item.name) : String(row.recommended_item || '');
-            if (!name) {
-                return;
-            }
-            const anchor = String(row.anchor_item || '');
-            const reason = String(row.reason || '');
-            lines.push((anchor ? (anchor + ' → ' + name) : name) + (reason ? (' — ' + reason) : ''));
-        }
-        if (config && Array.isArray(config.pairs)) {
-            config.pairs.forEach(addRow);
-        }
-        if (config && Array.isArray(config.popular)) {
-            config.popular.forEach(addRow);
-        }
-        const list = document.getElementById('posRecommendationsList');
-        if (!lines.length && list) {
-            list.querySelectorAll('.pos-recommendation-card strong').forEach((el) => {
-                lines.push(el.textContent);
-            });
-        }
-        const message = lines.length
-            ? lines.join('\n')
-            : 'Add items to the cart to see pairing suggestions. Pairings come from completed-order patterns.';
-        if (window.KinAlertModal) {
-            window.KinAlertModal.alert(message, 'Recommended add-ons', 'Close');
-        }
+        setOpen(true);
         const panel = document.getElementById('posRecommendationsPanel');
         if (panel && panel.tagName === 'DETAILS') {
             panel.open = true;
         }
     });
+    if (back) {
+        back.addEventListener('click', function () {
+            setOpen(false);
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !overlay.hidden) {
+            setOpen(false);
+        }
+    });
 }
 
 function togglePwdSeniorInput() {
-    const isChecked = document.getElementById('isPwdSenior')?.checked;
+    const isPwdSenior = document.getElementById('isPwdSenior');
+    const isChecked = !!(isPwdSenior && isPwdSenior.checked);
     const group = document.getElementById('pwdSeniorIdGroup');
     if (group) {
         group.style.display = isChecked ? 'block' : 'none';
     }
+    if (isChecked) {
+        const storeDiscount = document.getElementById('isStoreDiscount');
+        if (storeDiscount) {
+            storeDiscount.checked = false;
+        }
+    }
+}
+
+function toggleStoreDiscount() {
+    const storeDiscount = document.getElementById('isStoreDiscount');
+    if (!(storeDiscount && storeDiscount.checked)) {
+        return;
+    }
+    const isPwdSenior = document.getElementById('isPwdSenior');
+    if (isPwdSenior) {
+        isPwdSenior.checked = false;
+    }
+    togglePwdSeniorInput();
 }
 
 function selectCategory(panelId, button) {

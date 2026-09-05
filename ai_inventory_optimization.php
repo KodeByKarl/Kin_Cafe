@@ -20,6 +20,7 @@ $feature = getAiInventoryOptimizationData($pdo);
 <div class="main-content analytics-admin-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('inventory.php', 'Back to Inventory'); ?>
             <h1 class="page-title">Inventory Optimization Feature</h1>
             <p class="page-subtitle">Analyze stock levels and 14-day consumption rates to recommend optimal inventory quantities.</p>
         </div>

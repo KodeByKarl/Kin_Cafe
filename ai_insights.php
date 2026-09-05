@@ -29,12 +29,12 @@ $inventoryHealth = $ai['inventory_health'] ?? getAiInventoryHealthSnapshot($pdo)
 <div class="main-content analytics-admin-page ai-insights-page ai-module-page">
     <div class="page-hero analytics-hero">
         <div>
+            <?php renderPageBackButton('analytics.php', 'Back to Analytics'); ?>
             <h1 class="page-title">AI Business Suite</h1>
             <p class="page-subtitle">Eleven dedicated AI-supported features distributed across analytics, inventory, and service workflows.</p>
         </div>
         <div class="analytics-hero-actions">
             <span class="analytics-badge">11 Feature Modules</span>
-            <a class="btn btn-outline-secondary" href="analytics.php">Back to Analytics</a>
         </div>
     </div>
 
