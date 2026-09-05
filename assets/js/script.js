@@ -108,13 +108,14 @@ function getPaymentEntries() {
 }
 
 function getCartSummary() {
-    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const subtotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     const round = (window.KinCashChange && window.KinCashChange.roundToCents) ? window.KinCashChange.roundToCents : (n) => Math.round((Number(n) || 0) * 100) / 100;
     
     const isPwdSeniorEl = document.getElementById('isPwdSenior');
-    const isPwdSenior = isPwdSeniorEl ? isPwdSeniorEl.checked : false;
+    const isPwdSenior = !!(isPwdSeniorEl && isPwdSeniorEl.checked);
     const isStoreDiscountEl = document.getElementById('isStoreDiscount');
-    const isStoreDiscount = isStoreDiscountEl ? isStoreDiscountEl.checked : false;
+    const isStoreDiscount = !!(isStoreDiscountEl && isStoreDiscountEl.checked);
+    const taxRate = Number((window.POS_CONFIG && window.POS_CONFIG.taxRate) || 0);
 
     let discount = 0;
     let total = subtotal;
@@ -123,9 +124,15 @@ function getCartSummary() {
     let discountLabel = 'Discount';
 
     if (isPwdSenior && subtotal > 0) {
-        const vatExclusive = round(subtotal / 1.12);
-        discount = round(vatExclusive * 0.20);
-        total = round(Math.max(vatExclusive - discount, 0));
+        // Statutory PWD/Senior: 20% off. If prices are VAT-inclusive, strip VAT first and leave VAT at 0.
+        if (taxRate > 0) {
+            const vatExclusive = round(subtotal / (1 + taxRate));
+            discount = round(vatExclusive * 0.20);
+            total = round(Math.max(vatExclusive - discount, 0));
+        } else {
+            discount = round(subtotal * 0.20);
+            total = round(Math.max(subtotal - discount, 0));
+        }
         discountType = 'pwd_senior';
         discountLabel = 'PWD/Senior (20% Off)';
     } else if (isStoreDiscount && subtotal > 0) {
@@ -135,8 +142,8 @@ function getCartSummary() {
         discountLabel = 'Store Discount (10% Off)';
     } else {
         const promotion = getEstimatedPromotion(subtotal);
-        discount = promotion.discountAmount;
-        total = Math.max(subtotal - discount, 0);
+        discount = round(Number(promotion.discountAmount) || 0);
+        total = round(Math.max(subtotal - discount, 0));
         promotionObj = promotion.promotion;
         if (discount > 0) {
             discountType = 'promo';
@@ -733,6 +740,32 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         ['input', 'change', 'keyup', 'blur'].forEach((evt) => amount.addEventListener(evt, handler));
         handler();
+    }
+
+    const refreshTotals = () => {
+        if (typeof updateCartDisplay === 'function') {
+            updateCartDisplay();
+        }
+    };
+
+    const pwdCheckbox = document.getElementById('isPwdSenior');
+    if (pwdCheckbox) {
+        pwdCheckbox.addEventListener('change', () => {
+            if (typeof togglePwdSeniorInput === 'function') {
+                togglePwdSeniorInput();
+            }
+            refreshTotals();
+        });
+    }
+
+    const storeCheckbox = document.getElementById('isStoreDiscount');
+    if (storeCheckbox) {
+        storeCheckbox.addEventListener('change', () => {
+            if (typeof toggleStoreDiscount === 'function') {
+                toggleStoreDiscount();
+            }
+            refreshTotals();
+        });
     }
 
     const paymentMethod = document.getElementById('paymentMethod1');

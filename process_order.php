@@ -290,10 +290,18 @@ try {
             throw new InvalidArgumentException('PWD / Senior Citizen ID number is required when applying statutory discount.');
         }
         $discountType = 'pwd_senior';
-        $vatExclusiveSubtotal = round((float) $subtotal / 1.12, 2);
-        $discountAmount = round($vatExclusiveSubtotal * 0.20, 2);
-        $taxAmount = 0.00;
-        $totalAmount = round(max($vatExclusiveSubtotal - $discountAmount, 0), 2);
+        $taxRateSetting = (float) getSetting($pdo, 'tax_rate', '0.00');
+        if ($taxRateSetting > 0) {
+            $vatExclusiveSubtotal = round((float) $subtotal / (1 + $taxRateSetting), 2);
+            $discountAmount = round($vatExclusiveSubtotal * 0.20, 2);
+            $taxAmount = 0.00;
+            $totalAmount = round(max($vatExclusiveSubtotal - $discountAmount, 0), 2);
+        } else {
+            $discountAmount = round((float) $subtotal * 0.20, 2);
+            $discountAmount = round(min(max($discountAmount, 0), (float) $subtotal), 2);
+            $taxAmount = 0.00;
+            $totalAmount = round(max((float) $subtotal - $discountAmount, 0), 2);
+        }
     } elseif ($isStoreDiscount) {
         $discountType = 'store';
         $discountAmount = round((float) $subtotal * 0.10, 2);

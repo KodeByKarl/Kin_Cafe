@@ -19,6 +19,12 @@
         __DIR__ . '/../assets/css/theme.css',
         __DIR__ . '/../assets/css/ui-modern.css',
         __DIR__ . '/../assets/css/pos.css',
+        __DIR__ . '/../assets/js/script.js',
+        __DIR__ . '/../assets/js/cash-change.js',
+        __DIR__ . '/../assets/js/alert-modal.js',
+        __DIR__ . '/../assets/js/form-autosave.js',
+        __DIR__ . '/../assets/js/live-search.js',
+        __DIR__ . '/../assets/js/password-toggle.js',
     ];
     $assetVer = 0;
     foreach ($assetCandidates as $assetPath) {

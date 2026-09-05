@@ -797,6 +797,11 @@ body.pos .pos-modern-cats button:hover {
     align-items: center;
 }
 
+.pos-order-summary-row[hidden],
+.pos-order-summary-total[hidden] {
+    display: none !important;
+}
+
 .pos-order-summary-row span,
 .pos-order-summary-total span,
 .pos-order-summary-row strong,
