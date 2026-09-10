@@ -154,6 +154,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Fill in all password fields.';
         } elseif (strlen($newPassword) < 8) {
             $errors[] = 'New password must be at least 8 characters.';
+        } elseif (passwordContainsWhitespace($newPassword)) {
+            $errors[] = 'Password cannot contain spaces.';
         } elseif ($newPassword !== $confirmPassword) {
             $errors[] = 'New password and confirmation do not match.';
         } else {
@@ -179,6 +181,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($newUsername === '' || $newPassword === '') {
             $errors[] = 'New username and password are required.';
+        } elseif (strlen($newPassword) < 8) {
+            $errors[] = 'New password must be at least 8 characters.';
+        } elseif (passwordContainsWhitespace($newPassword)) {
+            $errors[] = 'Password cannot contain spaces.';
         } elseif (!in_array($newRole, ['supervisor', 'cashier'], true)) {
             $errors[] = 'Select a valid role.';
         } else {
@@ -755,15 +761,15 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                             <div class="form-row">
                                 <div class="form-group col-md-4">
                                     <label for="current_password">Current Password</label>
-                                    <input type="password" class="form-control" id="current_password" name="current_password" required>
+                                    <input type="password" class="form-control" id="current_password" name="current_password" required data-no-spaces="1">
                                 </div>
                                 <div class="form-group col-md-4">
                                     <label for="new_password">New Password</label>
-                                    <input type="password" class="form-control" id="new_password" name="new_password" minlength="8" required>
+                                    <input type="password" class="form-control" id="new_password" name="new_password" minlength="8" required data-no-spaces="1" pattern="\S{8,}" title="At least 8 characters with no spaces">
                                 </div>
                                 <div class="form-group col-md-4">
                                     <label for="confirm_password">Confirm New Password</label>
-                                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="8" required>
+                                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="8" required data-no-spaces="1" pattern="\S{8,}" title="At least 8 characters with no spaces">
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-primary">Update Password</button>
@@ -855,7 +861,7 @@ $autoBackupTime = getSetting($pdo, 'auto_backup_time', '17:00');
                                     </div>
                                     <div class="form-group">
                                         <label class="font-weight-bold">Password</label>
-                                        <input type="password" class="form-control" name="new_password" minlength="8" placeholder="At least 8 characters" required>
+                                        <input type="password" class="form-control" name="new_password" minlength="8" placeholder="At least 8 characters, no spaces" required data-no-spaces="1" pattern="\S{8,}" title="At least 8 characters with no spaces">
                                     </div>
                                     <div class="form-group mb-0">
                                         <label class="font-weight-bold">Role</label>

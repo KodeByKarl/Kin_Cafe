@@ -61,6 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $resetError = 'Enter a valid email address.';
         } elseif (strlen($resetPassword) < 8) {
             $resetError = 'New password must be at least 8 characters.';
+        } elseif (passwordContainsWhitespace($resetPassword)) {
+            $resetError = 'Password cannot contain spaces.';
         } elseif ($resetPassword !== $resetConfirmPassword) {
             $resetError = 'New password and confirmation do not match.';
         } else {
@@ -553,7 +555,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                         <div class="login-field">
                             <label for="password">Password</label>
-                            <input type="password" name="password" id="password" required autocomplete="current-password" placeholder="••••••••">
+                            <input type="password" name="password" id="password" required autocomplete="current-password" placeholder="••••••••" data-no-spaces="1">
                         </div>
                         <div class="login-form-meta">
                             <button type="button" class="forgot-password-trigger" id="forgotPasswordTrigger" aria-controls="forgotPasswordPanel" aria-expanded="<?php echo $activePanel === 'forgot' ? 'true' : 'false'; ?>">Forgot password?</button>
@@ -595,11 +597,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 </div>
                                 <div class="login-field">
                                     <label for="reset_password">New password</label>
-                                    <input type="password" name="reset_password" id="reset_password" minlength="8" required>
+                                    <input type="password" name="reset_password" id="reset_password" minlength="8" required data-no-spaces="1" pattern="\S{8,}" title="At least 8 characters with no spaces">
                                 </div>
                                 <div class="login-field">
                                     <label for="reset_confirm_password">Confirm</label>
-                                    <input type="password" name="reset_confirm_password" id="reset_confirm_password" minlength="8" required>
+                                    <input type="password" name="reset_confirm_password" id="reset_confirm_password" minlength="8" required data-no-spaces="1" pattern="\S{8,}" title="At least 8 characters with no spaces">
                                 </div>
                             <?php endif; ?>
                             <div class="forgot-password-actions">
@@ -631,6 +633,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             return;
         }
         sessionStorage.setItem(key, tab);
+    })();
+
+    (function () {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('logged_out') === '1') {
+            try {
+                sessionStorage.removeItem('kc_tab_id');
+            } catch (e) {}
+            params.delete('logged_out');
+            const next = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+            window.history.replaceState({}, '', next);
+        }
+        // After logout, Back should not restore a cached admin page.
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
     })();
 
     (function () {

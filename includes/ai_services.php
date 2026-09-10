@@ -686,7 +686,7 @@ function aiGetVirtualAssistantConfig(PDO $pdo): array {
             $pdo,
             'KIN_CAFE_AI_SYSTEM_PROMPT',
             'ai_assistant_system_prompt',
-            'You are the Kin Cafe virtual assistant. Answer only with information grounded in the provided business context. If the answer is not supported by the context, say that the system does not currently have enough verified data.'
+            'You are the Kin Cafe system assistant. Answer ONLY questions about Kin Cafe POS, sales, inventory, menu, orders, forecasts, anomalies, customers, and staff workflows using the provided business context. Refuse general chat, math puzzles, jokes, homework, coding help, and anything not grounded in Kin Cafe system data. If asked something outside the system, reply briefly that you only answer Kin Cafe system questions.'
         ),
         'timeout_seconds' => max(5, (int) aiGetConfigValue($pdo, 'KIN_CAFE_AI_TIMEOUT_SECONDS', 'ai_assistant_timeout_seconds', '20')),
     ];
@@ -1375,6 +1375,72 @@ function getAiAnomalyDetectionData(PDO $pdo): array {
     ];
 }
 
+/**
+ * Drill-down for a sales anomaly day: where the variance peso amount comes from.
+ */
+function getAiAnomalySalesDayDetail(PDO $pdo, string $saleDate, float $averageDailySales = 0.0): array {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $saleDate)) {
+        return ['success' => false, 'message' => 'Invalid sale date.'];
+    }
+
+    if ($averageDailySales <= 0) {
+        $signals = aiBuildSignals($pdo);
+        $averageDailySales = (float) ($signals['average_daily_sales'] ?? 0);
+    }
+
+    $dayTotalStmt = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(total_amount - refund_amount, 0)), 0) AS day_sales,
+            COUNT(*) AS order_count
+        FROM orders
+        WHERE payment_status = 'completed'
+          AND DATE(created_at) = ?");
+    $dayTotalStmt->execute([$saleDate]);
+    $daySummary = $dayTotalStmt->fetch(PDO::FETCH_ASSOC) ?: ['day_sales' => 0, 'order_count' => 0];
+    $daySales = (float) ($daySummary['day_sales'] ?? 0);
+    $orderCount = (int) ($daySummary['order_count'] ?? 0);
+    $gapAmount = round(abs($daySales - $averageDailySales), 2);
+    $type = $daySales > $averageDailySales ? 'Spike' : ($daySales < $averageDailySales ? 'Drop' : 'Flat');
+
+    $ordersStmt = $pdo->prepare("SELECT o.id, o.receipt_number, o.created_at,
+            GREATEST(o.total_amount - o.refund_amount, 0) AS net_amount,
+            COALESCE(NULLIF(TRIM(c.name), ''), 'Walk-in') AS customer_name
+        FROM orders o
+        LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE o.payment_status = 'completed'
+          AND DATE(o.created_at) = ?
+        ORDER BY o.created_at ASC
+        LIMIT 40");
+    $ordersStmt->execute([$saleDate]);
+    $orders = $ordersStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $itemsStmt = $pdo->prepare("SELECT COALESCE(mi.name, oi.item_name_snapshot) AS item_name,
+            COALESCE(SUM(oi.quantity), 0) AS qty,
+            COALESCE(SUM(GREATEST(oi.line_total, 0)), 0) AS revenue
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+        WHERE o.payment_status = 'completed'
+          AND DATE(o.created_at) = ?
+        GROUP BY item_name
+        ORDER BY revenue DESC, qty DESC
+        LIMIT 10");
+    $itemsStmt->execute([$saleDate]);
+    $topItems = $itemsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    return [
+        'success' => true,
+        'sale_date' => $saleDate,
+        'type' => $type,
+        'day_sales' => round($daySales, 2),
+        'order_count' => $orderCount,
+        'average_daily_sales' => round($averageDailySales, 2),
+        'gap_amount' => $gapAmount,
+        'formula' => 'Variance = |Day net sales − 30-day average daily sales|',
+        'data_source' => 'orders table (payment_status = completed), last 30 days for the average',
+        'orders' => $orders,
+        'top_items' => $topItems,
+    ];
+}
+
 function getAiWasteReductionData(PDO $pdo): array {
     $signals = aiBuildSignals($pdo);
 
@@ -1478,9 +1544,88 @@ function aiTokenizeQuestion(string $value): array {
     return array_values(array_unique($matches[0] ?? []));
 }
 
+function aiSystemRefuseMessage(): string {
+    return '<strong>Kin Cafe System Assistant:</strong><br>I only answer questions about this Kin Cafe system — sales, inventory, menu, orders, forecasts, anomalies, customers, and POS workflows.<br><small>Try asking about today\'s sales, low stock, top sellers, or pending orders.</small>';
+}
+
+/**
+ * Allow cafe/system questions; reject general chat (e.g. "1+1", jokes, homework).
+ */
+function aiIsCafeSystemQuestion(string $question): bool {
+    $q = strtolower(trim($question));
+    if ($q === '') {
+        return false;
+    }
+
+    // Obvious off-topic: pure math / arithmetic / riddles without cafe terms
+    if (preg_match('/^\s*[\d\s\+\-\*\/\^\(\)\.=]+\s*$/', $q)) {
+        return false;
+    }
+    if (preg_match('/\b(what is|whats|what\'s|how much is)\s+\d+\s*[\+\-\*\/x×÷]\s*\d+/i', $q)) {
+        return false;
+    }
+    if (preg_match('/\b\d+\s*[\+\-\*\/x×÷]\s*\d+\b/', $q) && !preg_match('/(sale|sales|order|stock|menu|price|peso|php|₱)/i', $q)) {
+        return false;
+    }
+    if (preg_match('/\b(tell me a joke|who is the president|write (me )?(a |an )?(poem|essay|code)|solve this|homework|capital of)\b/i', $q)) {
+        return false;
+    }
+
+    $systemHints = [
+        'sale', 'sales', 'revenue', 'income', 'earn', 'today', 'forecast', 'predict', 'stock', 'inventory',
+        'ingredient', 'reorder', 'expire', 'expir', 'waste', 'spoil', 'menu', 'item', 'product', 'food',
+        'drink', 'best', 'seller', 'popular', 'demand', 'order', 'pending', 'kitchen', 'queue', 'customer',
+        'loyalty', 'prefer', 'pos', 'discount', 'receipt', 'cash', 'checkout', 'pwd', 'senior', 'help',
+        'anomaly', 'variance', 'spike', 'drop', 'cafe', 'kin', 'report', 'analytics', 'how much', 'price',
+        'cost', 'category', 'beverage', 'coffee', 'latte', 'milk', 'sugar', 'supplier', 'purchase',
+    ];
+
+    foreach ($systemHints as $hint) {
+        if (str_contains($q, $hint)) {
+            return true;
+        }
+    }
+
+    // Short generic greetings → still allow a system-scoped greeting path via local matcher
+    if (preg_match('/^(hi|hello|hey|good (morning|afternoon|evening))\b/i', $q)) {
+        return true;
+    }
+
+    return false;
+}
+
 function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
     $q = strtolower(trim($question));
+
+    if (!aiIsCafeSystemQuestion($question)) {
+        return aiSystemRefuseMessage();
+    }
+
     $overview = getAiOverviewData($pdo);
+
+    // 0. MENU PRICE / HOW MUCH IS ...
+    if (preg_match('/(how much|price|magkano|cost of)\b/i', $q)) {
+        $menuName = trim(preg_replace('/^(how much (is|for|ang)|what(\'s| is) the price of|magkano(\s+ba)?(\s+ang)?|price of|cost of)\s+/i', '', $question));
+        $menuName = trim(preg_replace('/[?\s]+$/', '', $menuName));
+        if ($menuName !== '' && strlen($menuName) >= 2) {
+            $stmt = $pdo->prepare("SELECT name, price, available FROM menu_items
+                WHERE name LIKE ?
+                ORDER BY CASE WHEN LOWER(name) = LOWER(?) THEN 0 ELSE 1 END, name ASC
+                LIMIT 5");
+            $like = '%' . $menuName . '%';
+            $stmt->execute([$like, $menuName]);
+            $matches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($matches) {
+                $lines = ['<strong>Menu Price (from Kin Cafe menu):</strong>'];
+                foreach ($matches as $item) {
+                    $avail = !empty($item['available']) ? 'Available' : 'Unavailable';
+                    $lines[] = '• <strong>' . htmlspecialchars((string) $item['name']) . '</strong>: ₱' . number_format((float) $item['price'], 2) . ' <small>(' . $avail . ')</small>';
+                }
+                return implode('<br>', $lines);
+            }
+            return '<strong>Menu Price:</strong> No menu item matched “' . htmlspecialchars($menuName) . '” in the system.';
+        }
+    }
 
     // 1. TODAY'S SALES / REVENUE / NET SALES / ORDERS TODAY
     if (preg_match('/(today|make today|earned today|revenue|sales today|income today|total sales)/i', $q)) {
@@ -1578,11 +1723,7 @@ function aiBuildLocalAssistantAnswer(PDO $pdo, string $question): string {
         return $bestAnswer;
     }
 
-    // 10. DYNAMIC PREDICTIVE OVERVIEW SUMMARY
-    $todayNet = number_format((float) ($overview['today']['net_sales'] ?? 0), 2);
-    $pending = (int) ($overview['pending_orders'] ?? 0);
-    $forecastVal = number_format((float) ($overview['forecast_next_week'] ?? 0), 2);
-    return "<strong>Kin Cafe Virtual Assistant:</strong><br>• <strong>Today's Sales:</strong> ₱" . $todayNet . "<br>• <strong>Pending Orders:</strong> " . $pending . "<br>• <strong>7-Day Forecast:</strong> ₱" . $forecastVal . "<br><small>Ask any specific question or click a prompt above!</small>";
+    return aiSystemRefuseMessage();
 }
 
 function aiBuildAssistantContext(PDO $pdo): string {
@@ -1782,6 +1923,17 @@ function askAiVirtualAssistant(PDO $pdo, string $question): array {
         $question = mb_substr($question, 0, $maxQuestionLength);
     } elseif (strlen($question) > $maxQuestionLength) {
         $question = substr($question, 0, $maxQuestionLength);
+    }
+
+    if (!aiIsCafeSystemQuestion($question)) {
+        return [
+            'success' => true,
+            'answer' => aiSystemRefuseMessage(),
+            'source' => 'local',
+            'provider' => 'system scope guard',
+            'model' => 'rules-based refusal',
+            'notice' => '',
+        ];
     }
 
     $config = aiGetVirtualAssistantConfig($pdo);

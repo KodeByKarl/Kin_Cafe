@@ -2,12 +2,17 @@
 <html lang="en">
 <head>
     <?php
+    if (isset($_SESSION['admin']) && function_exists('sendAuthenticatedNoStoreHeaders')) {
+        sendAuthenticatedNoStoreHeaders();
+    }
     $brandLogoPath = 'assets/images/kin-cafe-logo.jpg';
     $brandLogoVersion = @filemtime(__DIR__ . '/../assets/images/kin-cafe-logo.jpg') ?: time();
     $brandLogoUrl = $brandLogoPath . '?v=' . $brandLogoVersion;
     ?>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, private">
+    <meta http-equiv="Pragma" content="no-cache">
     <title><?php echo $title ?? 'Kin Cafe Admin'; ?></title>
     <link rel="icon" type="image/jpeg" href="<?php echo htmlspecialchars($brandLogoUrl); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -86,9 +91,11 @@
     ];
     ?>
     <button class="kc-mobile-nav-toggle" type="button" aria-label="Open navigation" aria-controls="kc-sidebar-nav" aria-expanded="false">
-        <span></span>
-        <span></span>
-        <span></span>
+        <span class="kc-burger-lines" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+        </span>
     </button>
     <aside class="sidebar-nav">
         <div class="sidebar-brand">
@@ -208,7 +215,11 @@ function confirmLogout(event) {
     event.preventDefault();
     const go = () => {
         const tab = new URLSearchParams(window.location.search).get('tab') || 'default';
-        window.location.href = 'logout.php?tab=' + encodeURIComponent(tab);
+        try {
+            sessionStorage.removeItem('kc_tab_id');
+        } catch (e) {}
+        // replace (not assign) so Back cannot return to this authenticated page
+        window.location.replace('logout.php?tab=' + encodeURIComponent(tab));
     };
     if (window.KinAlertModal && typeof window.KinAlertModal.confirm === 'function') {
         window.KinAlertModal.confirm('Are you sure you want to sign out?', 'Sign Out', 'Sign Out', 'Cancel').then((ok) => {
@@ -220,6 +231,14 @@ function confirmLogout(event) {
         go();
     }
 }
+
+// If the browser restores this page from bfcache after logout, force a reload
+// so PHP session gates redirect to the login screen.
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 </script>
     <div class="kc-shell">
 <?php

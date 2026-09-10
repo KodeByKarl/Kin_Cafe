@@ -143,12 +143,16 @@ try {
         $categoryStmt->execute([$startDate, $endDate]);
         $categorySales = $categoryStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $topItemsStmt = $pdo->prepare("SELECT COALESCE(mi.name, oi.item_name_snapshot) AS name, COALESCE(SUM(oi.quantity), 0) AS total_sold, COALESCE(SUM(GREATEST(oi.line_total, 0)), 0) AS revenue
+        $topItemsStmt = $pdo->prepare("SELECT COALESCE(mi.name, oi.item_name_snapshot) AS name,
+                COALESCE(mc.name, 'Uncategorized') AS category_name,
+                COALESCE(SUM(oi.quantity), 0) AS total_sold,
+                COALESCE(SUM(GREATEST(oi.line_total, 0)), 0) AS revenue
             FROM order_items oi
             JOIN orders o ON o.id = oi.order_id
             LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+            LEFT JOIN menu_categories mc ON mc.id = mi.category_id
             WHERE o.payment_status = 'completed' AND DATE(o.created_at) BETWEEN ? AND ?
-            GROUP BY mi.id, mi.name, oi.item_name_snapshot
+            GROUP BY mi.id, mi.name, oi.item_name_snapshot, mc.name
             ORDER BY total_sold DESC, revenue DESC
             LIMIT 10");
         $topItemsStmt->execute([$startDate, $endDate]);
@@ -231,7 +235,23 @@ try {
 
         $sections = [
             [
-                'title' => 'Overview',
+                'title' => 'Report Categories Index',
+                'note' => 'This workbook is organized by category sections below.',
+                'header' => ['Category', 'Section', 'What it covers'],
+                'rows' => [
+                    ['A. Sales', 'Overview', 'Today snapshot, forecast, top category'],
+                    ['A. Sales', 'Sales Performance', 'Daily net sales for the selected period'],
+                    ['A. Sales', 'Sales by Category', 'Revenue grouped by menu category'],
+                    ['A. Sales', 'Top Selling Items', 'Best sellers with category, qty, and revenue'],
+                    ['B. Customers', 'Top Customers', 'Highest spenders and loyalty points'],
+                    ['C. Inventory', 'Low Stock Ingredients', 'Ingredients below stock threshold'],
+                    ['C. Inventory', 'Expiring Ingredients', 'Near-expiry stock watchlist'],
+                    ['D. Insights', 'Upsell Recommendations', 'Items frequently ordered together'],
+                    ['E. Activity', 'Menu & Stock Activity', 'Staff edits to menu and stock'],
+                ],
+            ],
+            [
+                'title' => 'A. Sales — Overview',
                 'note' => 'Report range: ' . $startDate . ' to ' . $endDate . '.',
                 'header' => ['Metric', 'Value'],
                 'rows' => [
@@ -248,7 +268,7 @@ try {
                 ],
             ],
             [
-                'title' => 'Sales Performance',
+                'title' => 'A. Sales — Sales Performance',
                 'header' => ['Date', 'Net Sales (PHP)'],
                 'rows' => array_map(static function (array $row): array {
                     return [
@@ -258,7 +278,7 @@ try {
                 }, $salesRows),
             ],
             [
-                'title' => 'Sales by Category',
+                'title' => 'A. Sales — Sales by Category',
                 'header' => ['Category', 'Total Sales (PHP)'],
                 'rows' => array_map(static function (array $row): array {
                     return [
@@ -268,18 +288,19 @@ try {
                 }, $categorySales),
             ],
             [
-                'title' => 'Top Selling Items',
-                'header' => ['Item', 'Quantity Sold', 'Revenue (PHP)'],
+                'title' => 'A. Sales — Top Selling Items',
+                'header' => ['Item', 'Category', 'Quantity Sold', 'Revenue (PHP)'],
                 'rows' => array_map(static function (array $row): array {
                     return [
                         (string) $row['name'],
+                        (string) ($row['category_name'] ?? 'Uncategorized'),
                         (string) ((int) ($row['total_sold'] ?? 0)),
                         number_format((float) ($row['revenue'] ?? 0), 2, '.', ''),
                     ];
                 }, $topItems),
             ],
             [
-                'title' => 'Top Customers',
+                'title' => 'B. Customers — Top Customers',
                 'header' => ['Customer', 'Phone', 'Loyalty Points', 'Sales Total (PHP)'],
                 'rows' => array_map(static function (array $row): array {
                     return [
@@ -291,7 +312,7 @@ try {
                 }, $topCustomers),
             ],
             [
-                'title' => 'Low Stock Ingredients',
+                'title' => 'C. Inventory — Low Stock Ingredients',
                 'header' => ['Ingredient', 'Stock Quantity', 'Unit'],
                 'rows' => array_map(static function (array $row): array {
                     return [
@@ -302,7 +323,7 @@ try {
                 }, $lowStockIngredients),
             ],
             [
-                'title' => 'Expiring Ingredients',
+                'title' => 'C. Inventory — Expiring Ingredients',
                 'header' => ['Ingredient', 'Stock Quantity', 'Unit', 'Expires At', 'Days Remaining'],
                 'rows' => array_map(static function (array $row): array {
                     return [
@@ -315,7 +336,7 @@ try {
                 }, $expiringIngredients),
             ],
             [
-                'title' => 'Upsell Recommendations',
+                'title' => 'D. Insights — Upsell Recommendations',
                 'header' => ['Item A', 'Item B', 'Times Ordered Together'],
                 'rows' => array_map(static function (array $row): array {
                     return [
@@ -326,7 +347,7 @@ try {
                 }, $recommendations),
             ],
             [
-                'title' => 'Menu & Stock Activity',
+                'title' => 'E. Activity — Menu & Stock Activity',
                 'note' => 'Who edited menu items or reduced/increased ingredient stock.',
                 'header' => ['When', 'Staff', 'Action', 'Details'],
                 'rows' => array_map(static function (array $row): array {

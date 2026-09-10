@@ -1,5 +1,17 @@
-﻿-- Database schema for Kin Cafe Cashier System
--- Updated package reference: sql/kin_cafe_preoral_2026-09-10.sql (2026-09-10)
+﻿-- Kin Cafe SQL package for pre-oral (prepared 2026-09-10)
+-- Base schema + seed users/menu categories/items.
+-- Default logins after import:
+--   admin / admin123
+--   cashier / cashier123
+--
+-- After importing this file in phpMyAdmin or mysql CLI:
+--   1) Open the app once so ensureSystemSchema() applies runtime columns/tables
+--   2) Optional demo orders (for forecasts/anomalies):
+--        C:\xampp\php\php.exe tools\seed_demo_data.php --force
+--   3) Or export a LIVE dump anytime from Settings > Database > Export SQL
+--      (uses generateSqlDatabaseDump) / or run tools\export_preoral_sql.bat
+--
+-- Database schema for Kin Cafe Cashier System
 
 CREATE DATABASE IF NOT EXISTS kin_cafe;
 USE kin_cafe;

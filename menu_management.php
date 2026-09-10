@@ -1093,9 +1093,9 @@ function normalizeRecipeUnit(unit) {
 
 function createRecipeRow(containerId, ingredientId = '', quantity = '', quantityUnit = '', ingredientName = '') {
     const row = document.createElement('div');
-    row.className = 'form-row align-items-end recipe-row';
+    row.className = 'recipe-row';
     row.innerHTML = `
-        <div class="form-group col-5">
+        <div class="form-group recipe-ingredient-wrap">
             <label>Ingredient</label>
             <select name="recipe_ingredient_id[]" class="form-control" required>
                 <option value="">-- Select ingredient --</option>
@@ -1103,11 +1103,11 @@ function createRecipeRow(containerId, ingredientId = '', quantity = '', quantity
             </select>
             <div class="selected-ingredient-text text-muted small mt-1"></div>
         </div>
-        <div class="form-group col-2">
+        <div class="form-group recipe-qty-wrap">
             <label>Quantity</label>
             <input type="number" step="0.01" min="0" name="recipe_quantity[]" class="form-control" value="${quantity !== '' ? String(quantity) : ''}" placeholder="0.00" required>
         </div>
-        <div class="form-group col-3">
+        <div class="form-group recipe-unit-wrap">
             <label>Unit</label>
             <select name="recipe_quantity_unit[]" class="form-control">
                 <option value=""${quantityUnit === '' ? ' selected' : ''}>Default</option>
@@ -1118,8 +1118,9 @@ function createRecipeRow(containerId, ingredientId = '', quantity = '', quantity
                 <option value="liters"${quantityUnit === 'liters' ? ' selected' : ''}>liters</option>
             </select>
         </div>
-        <div class="form-group col-2">
-            <button type="button" class="btn btn-outline-danger btn-block" onclick="removeRecipeRow(this)">Remove</button>
+        <div class="form-group recipe-remove-wrap">
+            <label>&nbsp;</label>
+            <button type="button" class="btn btn-outline-danger" onclick="removeRecipeRow(this)">Remove</button>
         </div>
     `;
     const container = document.getElementById(containerId);

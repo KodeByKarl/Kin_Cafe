@@ -342,10 +342,16 @@ $initialAnalyticsPayload = [
             <div class="card-body ai-module-body">
                 <ul class="ai-module-list">
                     <?php foreach ($aiAnomalyDetection['sales'] as $row): ?>
-                        <li><span><?php echo htmlspecialchars((string) $row['sale_date']); ?> — <?php echo htmlspecialchars((string) ($row['detection_method'] ?? 'Z-score')); ?></span><strong><?php echo htmlspecialchars((string) $row['type']); ?></strong></li>
+                        <li>
+                            <a class="ai-anomaly-trigger" href="ai_anomaly_detection.php">
+                                <span><?php echo htmlspecialchars((string) $row['sale_date']); ?> — <?php echo htmlspecialchars((string) ($row['detection_method'] ?? 'Z-score')); ?></span>
+                                <strong><?php echo htmlspecialchars((string) $row['type']); ?> · ₱<?php echo number_format((float) ($row['gap_amount'] ?? 0), 2); ?></strong>
+                            </a>
+                        </li>
                     <?php endforeach; ?>
                     <?php if (!$aiAnomalyDetection['sales']): ?><li><span>No sales anomalies detected.</span><strong>OK</strong></li><?php endif; ?>
                 </ul>
+                <p class="mb-0 mt-2"><a class="btn btn-sm btn-outline-secondary" href="ai_anomaly_detection.php">Open Stock Review &amp; variance drill-down</a></p>
                 <span class="forecast-model-label"><?php echo htmlspecialchars((string) ($aiAnomalyDetection['method_label'] ?? '')); ?></span>
             </div>
         </section>

@@ -717,6 +717,23 @@ function authLogoutAll(PDO $pdo): void {
     authRemoveAllActiveSessions($pdo);
 }
 
+/**
+ * Prevent browsers from caching authenticated UI so Back after logout
+ * cannot restore a protected page from bfcache/history.
+ */
+function sendAuthenticatedNoStoreHeaders(): void {
+    if (headers_sent()) {
+        return;
+    }
+    header('Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
+function passwordContainsWhitespace(string $password): bool {
+    return preg_match('/\s/u', $password) === 1;
+}
+
 function authBootstrap(PDO $pdo): void {
     $tabId = authTabId();
 
