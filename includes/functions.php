@@ -455,6 +455,54 @@ function ensureSystemSchema(PDO $pdo): void {
         FOREIGN KEY (by_user_id) REFERENCES users(id) ON DELETE SET NULL
     )");
 
+    $pdo->exec("CREATE TABLE IF NOT EXISTS suppliers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        contact_email VARCHAR(100) NULL,
+        contact_phone VARCHAR(50) NULL,
+        address TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ingredient_suppliers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ingredient_id INT NOT NULL,
+        supplier_id INT NOT NULL,
+        cost_per_unit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        is_default TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+    )");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        supplier_id INT NOT NULL,
+        status ENUM('draft', 'sent', 'received', 'cancelled') NOT NULL DEFAULT 'draft',
+        total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        created_by INT NULL,
+        notes TEXT NULL,
+        received_at DATETIME NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+    )");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        purchase_order_id INT NOT NULL,
+        ingredient_id INT NOT NULL,
+        quantity_ordered DECIMAL(10,2) NOT NULL,
+        quantity_received DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        line_total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+    )");
+
+    ensureColumn($pdo, 'suppliers', 'contact_email', 'VARCHAR(100) NULL');
+    ensureColumn($pdo, 'suppliers', 'contact_phone', 'VARCHAR(50) NULL');
+
     ensureColumn($pdo, 'users', 'role', "VARCHAR(20) NOT NULL DEFAULT 'supervisor'");
     ensureColumn($pdo, 'users', 'is_active', "TINYINT(1) NOT NULL DEFAULT 1");
 
@@ -522,6 +570,22 @@ function ensureSystemSchema(PDO $pdo): void {
         ensureColumn($pdo, 'ingredients', 'deleted_at', 'DATETIME NULL');
         ensureColumn($pdo, 'ingredients', 'deleted_by', 'INT NULL');
         ensureColumn($pdo, 'ingredients', 'max_stock', 'DECIMAL(10,2) DEFAULT 100');
+        ensureColumn($pdo, 'ingredients', 'critical_level', 'DECIMAL(10,2) NOT NULL DEFAULT 5.00');
+        ensureColumn($pdo, 'ingredients', 'reorder_point', 'DECIMAL(10,2) NOT NULL DEFAULT 10.00');
+        ensureColumn($pdo, 'ingredients', 'supplier_id', 'INT NULL');
+    }
+
+    if (tableExists($pdo, 'suppliers')) {
+        try {
+            $supplierCount = (int) $pdo->query("SELECT COUNT(*) FROM suppliers")->fetchColumn();
+            if ($supplierCount === 0) {
+                $pdo->exec("INSERT INTO suppliers (name, contact_email, contact_phone, address) VALUES 
+                    ('Kin Cafe Primary Supplier Co.', 'supplier@kincafe.com', '+63 917 123 4567', 'Metro Manila, Philippines'),
+                    ('Metro Food Products Inc.', 'orders@metrofood.ph', '+63 918 987 6543', 'Quezon City, Philippines')");
+            }
+        } catch (Throwable $e) {
+            // Non-blocking supplier seed
+        }
     }
 
     if (tableExists($pdo, 'menu_items')) {

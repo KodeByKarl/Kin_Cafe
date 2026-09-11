@@ -113,32 +113,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Ensure PO & Supplier schema exists in case tables were unmigrated
+if (function_exists('ensureSystemSchema')) {
+    ensureSystemSchema($pdo);
+}
+
 // Fetch PO Data
-$draftPos = $pdo->query("SELECT po.*, s.name AS supplier_name, s.contact_email 
-    FROM purchase_orders po 
-    JOIN suppliers s ON s.id = po.supplier_id 
-    WHERE po.status = 'draft' 
-    ORDER BY po.id DESC")->fetchAll(PDO::FETCH_ASSOC);
-
-$activePos = $pdo->query("SELECT po.*, s.name AS supplier_name, s.contact_email 
-    FROM purchase_orders po 
-    JOIN suppliers s ON s.id = po.supplier_id 
-    WHERE po.status IN ('sent') 
-    ORDER BY po.id DESC")->fetchAll(PDO::FETCH_ASSOC);
-
-$allPos = $pdo->query("SELECT po.*, s.name AS supplier_name, s.contact_email 
-    FROM purchase_orders po 
-    JOIN suppliers s ON s.id = po.supplier_id 
-    ORDER BY po.id DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
-
-$suppliers = $pdo->query("SELECT * FROM suppliers ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$ingredients = $pdo->query("SELECT * FROM ingredients WHERE deleted_at IS NULL ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-
-// Map items for each PO
+$draftPos = [];
+$activePos = [];
+$allPos = [];
+$suppliers = [];
+$ingredients = [];
 $poItemsMap = [];
-$poItemsQuery = $pdo->query("SELECT poi.*, ing.name AS ingredient_name, ing.unit FROM purchase_order_items poi JOIN ingredients ing ON ing.id = poi.ingredient_id")->fetchAll(PDO::FETCH_ASSOC);
-foreach ($poItemsQuery as $item) {
-    $poItemsMap[$item['purchase_order_id']][] = $item;
+
+try {
+    $draftPos = $pdo->query("SELECT po.*, s.name AS supplier_name, s.contact_email 
+        FROM purchase_orders po 
+        JOIN suppliers s ON s.id = po.supplier_id 
+        WHERE po.status = 'draft' 
+        ORDER BY po.id DESC")->fetchAll(PDO::FETCH_ASSOC);
+
+    $activePos = $pdo->query("SELECT po.*, s.name AS supplier_name, s.contact_email 
+        FROM purchase_orders po 
+        JOIN suppliers s ON s.id = po.supplier_id 
+        WHERE po.status IN ('sent') 
+        ORDER BY po.id DESC")->fetchAll(PDO::FETCH_ASSOC);
+
+    $allPos = $pdo->query("SELECT po.*, s.name AS supplier_name, s.contact_email 
+        FROM purchase_orders po 
+        JOIN suppliers s ON s.id = po.supplier_id 
+        ORDER BY po.id DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+
+    $suppliers = $pdo->query("SELECT * FROM suppliers ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $ingredients = $pdo->query("SELECT * FROM ingredients WHERE deleted_at IS NULL ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+    // Map items for each PO
+    $poItemsQuery = $pdo->query("SELECT poi.*, ing.name AS ingredient_name, ing.unit FROM purchase_order_items poi JOIN ingredients ing ON ing.id = poi.ingredient_id")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($poItemsQuery as $item) {
+        $poItemsMap[$item['purchase_order_id']][] = $item;
+    }
+} catch (Exception $e) {
+    if (empty($errorMessage)) {
+        $errorMessage = 'Unable to load purchase order data: ' . $e->getMessage();
+    }
 }
 ?>
 

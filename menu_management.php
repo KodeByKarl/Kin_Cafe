@@ -886,7 +886,7 @@ Chocolate Milkshake,Beverages,120,yes,Milk:200 ml; Chocolate Syrup:30 ml; Ice Cr
 
 <!-- Add Item Modal -->
 <div class="modal fade" id="addItemModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <form id="addItemForm" enctype="multipart/form-data">
                 <div class="modal-header">
@@ -1000,7 +1000,7 @@ Chocolate Milkshake,Beverages,120,yes,Milk:200 ml; Chocolate Syrup:30 ml; Ice Cr
 
 <!-- Edit Item Modal (will be populated by JS) -->
 <div class="modal fade" id="editItemModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <form method="post" id="editForm" enctype="multipart/form-data">
                 <div class="modal-header">
@@ -1142,6 +1142,11 @@ function createRecipeRow(containerId, ingredientId = '', quantity = '', quantity
         const ingredientLabelDiv = row.querySelector('.selected-ingredient-text');
         if (ingredientLabelDiv) {
             ingredientLabelDiv.textContent = getIngredientLabelById(ingredientId) || ingredientName || 'Select an ingredient';
+            if (ingredientSelect) {
+                ingredientSelect.addEventListener('change', function () {
+                    ingredientLabelDiv.textContent = getIngredientLabelById(this.value) || (this.value ? '' : 'Select an ingredient');
+                });
+            }
         }
         const unitSelect = row.querySelector('select[name="recipe_quantity_unit[]"]');
         if (unitSelect && quantityUnit !== '') {

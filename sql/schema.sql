@@ -1,4 +1,4 @@
-﻿-- Database schema for Kin Cafe Cashier System
+-- Database schema for Kin Cafe Cashier System
 -- Updated package reference: sql/kin_cafe_preoral_2026-09-10.sql (2026-09-10)
 
 CREATE DATABASE IF NOT EXISTS kin_cafe;
@@ -68,19 +68,30 @@ CREATE TABLE customers (
 CREATE TABLE suppliers (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  contact VARCHAR(100),
-  address TEXT
+  contact_email VARCHAR(100) NULL,
+  contact_phone VARCHAR(50) NULL,
+  address TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+INSERT INTO suppliers (id, name, contact_email, contact_phone, address) VALUES
+(1, 'Kin Cafe Primary Supplier Co.', 'supplier@kincafe.com', '+63 917 123 4567', 'Metro Manila, Philippines'),
+(2, 'Metro Food Products Inc.', 'orders@metrofood.ph', '+63 918 987 6543', 'Quezon City, Philippines');
 
 CREATE TABLE ingredients (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   unit VARCHAR(50) DEFAULT 'pcs',
   stock_quantity DECIMAL(10,2) DEFAULT 0,
+  unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  critical_level DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+  reorder_point DECIMAL(10,2) NOT NULL DEFAULT 10.00,
+  supplier_id INT NULL,
   manufacturing_date DATE NULL,
   expiration_date DATE NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
 );
 
 CREATE TABLE menu_items (
@@ -326,5 +337,42 @@ CREATE TABLE daily_reconciliations (
   reconciled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_business_date (business_date),
   FOREIGN KEY (reconciled_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE ingredient_suppliers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ingredient_id INT NOT NULL,
+  supplier_id INT NOT NULL,
+  cost_per_unit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+);
+
+CREATE TABLE purchase_orders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  supplier_id INT NOT NULL,
+  status ENUM('draft', 'sent', 'received', 'cancelled') NOT NULL DEFAULT 'draft',
+  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  created_by INT NULL,
+  notes TEXT NULL,
+  received_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE purchase_order_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  purchase_order_id INT NOT NULL,
+  ingredient_id INT NOT NULL,
+  quantity_ordered DECIMAL(10,2) NOT NULL,
+  quantity_received DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  line_total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
 );
 
