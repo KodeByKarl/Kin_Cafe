@@ -272,9 +272,9 @@ try {
         }
     }
 
-    $isPwdSenior = !empty($payload['is_pwd_senior']);
-    $pwdSeniorId = trim((string) ($payload['pwd_senior_id'] ?? ''));
-    $isStoreDiscount = !empty($payload['is_store_discount']);
+    $isPwdSenior = !empty($data['is_pwd_senior']);
+    $pwdSeniorId = trim((string) ($data['pwd_senior_id'] ?? ''));
+    $isStoreDiscount = !empty($data['is_store_discount']);
 
     $promotion = null;
     $discountAmount = 0.0;

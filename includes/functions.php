@@ -254,6 +254,8 @@ function ensureSystemSchema(PDO $pdo): void {
         cash_received_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
         cash_received_denominations_json TEXT NULL,
         cash_change_denominations_json TEXT NULL,
+        discount_type VARCHAR(30) NULL,
+        pwd_senior_id VARCHAR(50) NULL,
         payment_method ENUM('cash') NOT NULL DEFAULT 'cash',
         payment_status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
         receipt_number VARCHAR(40) NULL,
@@ -543,6 +545,8 @@ function ensureSystemSchema(PDO $pdo): void {
     ensureColumn($pdo, 'orders', 'cash_received_amount', 'DECIMAL(10,2) NOT NULL DEFAULT 0');
     ensureColumn($pdo, 'orders', 'cash_received_denominations_json', 'TEXT NULL');
     ensureColumn($pdo, 'orders', 'cash_change_denominations_json', 'TEXT NULL');
+    ensureColumn($pdo, 'orders', 'discount_type', 'VARCHAR(30) NULL');
+    ensureColumn($pdo, 'orders', 'pwd_senior_id', 'VARCHAR(50) NULL');
 
     if (tableExists($pdo, 'order_payments')) {
         ensureColumn($pdo, 'order_payments', 'denominations_received_json', 'TEXT NULL');
